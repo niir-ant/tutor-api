@@ -1,7 +1,7 @@
 """
 SQLAlchemy database models
 """
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Enum as SQLEnum
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Enum as SQLEnum, TypeDecorator
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -9,6 +9,49 @@ import uuid
 
 from src.core.database import Base
 from src.models.user import UserRole, AccountStatus, TenantStatus
+
+
+class StrEnumType(TypeDecorator):
+    """
+    Type decorator to ensure str Enum values are used instead of enum names
+    when storing in PostgreSQL native enum columns.
+    
+    This fixes the issue where SQLAlchemy uses enum names (e.g., "SYSTEM_ADMIN")
+    instead of enum values (e.g., "system_admin") with native PostgreSQL enums.
+    """
+    impl = SQLEnum
+    cache_ok = True
+    
+    def __init__(self, enum_class, *args, **kwargs):
+        # Store enum_class before calling super
+        self.enum_class = enum_class
+        # Extract and handle native_enum and create_type
+        native_enum = kwargs.pop('native_enum', True)
+        create_type = kwargs.pop('create_type', False)
+        # Initialize the underlying SQLEnum with proper parameters
+        super().__init__(enum_class, native_enum=native_enum, create_type=create_type, *args, **kwargs)
+    
+    def process_bind_param(self, value, dialect):
+        """Convert enum to its string value when binding to database"""
+        if value is None:
+            return None
+        # If it's an enum instance, return its value (the string)
+        if isinstance(value, self.enum_class):
+            return value.value  # Use enum value ("system_admin"), not name ("SYSTEM_ADMIN")
+        # If it's already a string, return it as-is (assume it's already the correct value)
+        return value
+    
+    def process_result_value(self, value, dialect):
+        """Convert database value back to enum instance"""
+        if value is None:
+            return None
+        # Convert string value from DB back to enum instance
+        if isinstance(value, str):
+            return self.enum_class(value)
+        # If it's already an enum, return it
+        if isinstance(value, self.enum_class):
+            return value
+        return value
 
 
 class Tenant(Base):
@@ -99,8 +142,10 @@ class AdministratorAccount(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255))
-    role = Column(SQLEnum(UserRole), nullable=False)
-    account_status = Column(SQLEnum(AccountStatus), default=AccountStatus.PENDING_ACTIVATION)
+    # Use values_callable to ensure enum values (not names) are stored in PostgreSQL native enum columns
+    # This ensures "system_admin" is stored, not "SYSTEM_ADMIN"
+    role = Column(SQLEnum(UserRole, native_enum=True, create_type=False, values_callable=lambda x: [e.value for e in UserRole]), nullable=False)
+    status = Column(SQLEnum(AccountStatus, native_enum=True, create_type=False, values_callable=lambda x: [e.value for e in AccountStatus]), default=AccountStatus.PENDING_ACTIVATION)  # Note: column name is 'status' in DB, not 'account_status'
     requires_password_change = Column(Boolean, default=True)
     last_login = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

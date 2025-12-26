@@ -10,13 +10,24 @@ Usage:
 """
 import sys
 import secrets
-from passlib.context import CryptContext
 
-# Initialize password hashing context (same as in the application)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Try to use bcrypt directly first (more reliable)
+try:
+    import bcrypt
+    USE_BCRYPT_DIRECT = True
+except ImportError:
+    USE_BCRYPT_DIRECT = False
+    # Fallback to passlib if bcrypt not available
+    try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    except ImportError:
+        print("Error: Neither bcrypt nor passlib is available.")
+        print("Please install: pip install bcrypt")
+        sys.exit(1)
 
 
-def generate_password_hash(password: str = None) -> str:
+def generate_password_hash(password: str = None) -> tuple:
     """
     Generate a bcrypt hash for a password.
     
@@ -30,8 +41,26 @@ def generate_password_hash(password: str = None) -> str:
         # Generate a secure random password
         password = secrets.token_urlsafe(16)
     
+    # Ensure password is bytes (bcrypt requirement)
+    if isinstance(password, str):
+        password_bytes = password.encode('utf-8')
+    else:
+        password_bytes = password
+    
+    # Truncate password if longer than 72 bytes (bcrypt limit)
+    if len(password_bytes) > 72:
+        print(f"Warning: Password is longer than 72 bytes, truncating...")
+        password_bytes = password_bytes[:72]
+        password = password_bytes.decode('utf-8', errors='ignore')
+    
     # Generate bcrypt hash
-    password_hash = pwd_context.hash(password)
+    if USE_BCRYPT_DIRECT:
+        # Use bcrypt directly (more reliable)
+        salt = bcrypt.gensalt(rounds=12)
+        password_hash = bcrypt.hashpw(password_bytes, salt).decode('utf-8')
+    else:
+        # Fallback to passlib
+        password_hash = pwd_context.hash(password)
     
     return password, password_hash
 
@@ -48,11 +77,12 @@ def main():
         password = sys.argv[1]
         print(f"Using provided password...")
     else:
-        password, _ = generate_password_hash()
+        # Generate a secure random password first
+        password = secrets.token_urlsafe(16)
         print("Generated secure random password...")
     
     # Generate hash
-    _, password_hash = generate_password_hash(password)
+    password, password_hash = generate_password_hash(password)
     
     print()
     print("=" * 60)

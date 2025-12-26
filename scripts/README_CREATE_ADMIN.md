@@ -8,7 +8,32 @@ This guide explains how to create the first system administrator account in the 
 - PostgreSQL database is accessible
 - You have database admin privileges
 
-## Method 1: Using SQL Script with pgcrypto (Recommended)
+## Method 1: Using Environment Variables (Recommended)
+
+**This is the easiest and most secure method.**
+
+1. **Add variables to your `.env` file**:
+   ```bash
+   SYSTEM_ADMIN_USERNAME=psingh
+   SYSTEM_ADMIN_EMAIL=psingh@atduty.com
+   SYSTEM_ADMIN_NAME=System Administrator
+   SYSTEM_ADMIN_PASSWORD=your_temporary_password
+   ```
+
+2. **Run the Python script**:
+   ```bash
+   python scripts/create_system_admin_from_env.py
+   ```
+
+The script will automatically:
+- Read values from `.env` file
+- Generate password hash
+- Create or update the account
+- Display account details
+
+See `README_ENV_ADMIN.md` for more details.
+
+## Method 2: Using SQL Script with pgcrypto
 
 If your PostgreSQL database has the `pgcrypto` extension available:
 
