@@ -23,7 +23,7 @@ The migrations follow Semantic Versioning (SemVer) naming convention: `major.min
 
 ```bash
 # Connect to your database
-psql -U postgres -d quiz_api
+psql -U postgres -d tutor
 
 # Run migrations in order
 \i 0.0.10__initial_schema.sql
@@ -38,7 +38,7 @@ If using a migration tool like `migrate` (golang-migrate), `Flyway`, or `Liquiba
 
 ```bash
 # Example with golang-migrate
-migrate -path db/migration -database "postgres://user:password@localhost/quiz_api?sslmode=disable" up
+migrate -path db/migration -database "postgres://user:password@localhost/tutor?sslmode=disable" up
 ```
 
 ## Database Setup
@@ -46,8 +46,8 @@ migrate -path db/migration -database "postgres://user:password@localhost/quiz_ap
 ### 1. Create Database
 
 ```sql
-CREATE DATABASE quiz_api;
-\c quiz_api
+CREATE DATABASE tutor;
+\c tutor
 ```
 
 ### 2. Run Migrations
@@ -92,7 +92,7 @@ import psycopg2
 
 conn = psycopg2.connect(
     host="localhost",
-    database="quiz_api",
+    database="tutor",
     user="app_user",
     password="your_password"
 )
@@ -202,7 +202,7 @@ WHERE schemaname = 'public';
 Regular backups are essential:
 
 ```bash
-pg_dump -U app_migrator -d quiz_api -F c -f backup_$(date +%Y%m%d).dump
+pg_dump -U app_migrator -d tutor -F c -f backup_$(date +%Y%m%d).dump
 ```
 
 ## Troubleshooting

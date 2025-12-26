@@ -47,7 +47,7 @@ cp env.example .env
 Edit `.env` and set your database URL (this is required):
 
 ```bash
-DATABASE_URL=postgresql://postgres:password@localhost:5432/quiz_api
+DATABASE_URL=postgresql://postgres:password@localhost:5432/tutor
 ```
 
 **Note:** The `alembic.ini` file no longer contains a hardcoded database URL. 
@@ -60,7 +60,7 @@ You must set `DATABASE_URL` in your `.env` file or as a system environment varia
 psql -U postgres
 
 # Create database
-CREATE DATABASE quiz_api;
+CREATE DATABASE tutor;
 
 # Exit psql
 \q
@@ -148,7 +148,7 @@ If you get connection errors:
 
 2. Check database exists:
    ```bash
-   psql -U postgres -l | grep quiz_api
+   psql -U postgres -l | grep tutor
    ```
 
 3. Verify DATABASE_URL is correct:

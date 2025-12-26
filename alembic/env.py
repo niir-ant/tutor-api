@@ -39,7 +39,7 @@ if not database_url:
     raise ValueError(
         f"DATABASE_URL environment variable is required.\n"
         f"Please set it in .env file or as an environment variable.\n"
-        f"Example: DATABASE_URL=postgresql://user:password@localhost:5432/quiz_api\n"
+        f"Example: DATABASE_URL=postgresql://user:password@localhost:5432/tutor\n"
         f"See {env_example} for configuration template."
     )
 

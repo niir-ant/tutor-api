@@ -27,7 +27,7 @@ if [ ! -f ".env" ]; then
         cp env.example .env
         echo "⚠️  Please edit .env and set your DATABASE_URL and other configuration"
     else
-        echo "DATABASE_URL=postgresql://postgres:password@localhost:5432/quiz_api" > .env
+        echo "DATABASE_URL=postgresql://postgres:password@localhost:5432/tutor" > .env
         echo "⚠️  Created .env file. Please update with your database credentials"
     fi
 fi
@@ -46,7 +46,7 @@ echo ""
 echo "Next steps:"
 echo "1. Edit .env and set your DATABASE_URL (REQUIRED)"
 echo "2. Optionally configure other settings in .env (JWT, AI keys, etc.)"
-echo "3. Create database: createdb quiz_api (or via psql)"
+echo "3. Create database: createdb tutor (or via psql)"
 echo "4. Run migrations: alembic upgrade head"
 echo ""
 echo "To activate virtual environment in the future:"

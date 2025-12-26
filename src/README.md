@@ -61,7 +61,7 @@ pip install -r requirements.txt
 Copy `env.example` to `.env` and configure:
 
 ```bash
-DATABASE_URL=postgresql://user:password@localhost:5432/quiz_api
+DATABASE_URL=postgresql://user:password@localhost:5432/tutor
 JWT_SECRET_KEY=your-secret-key-here
 ```
 

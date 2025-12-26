@@ -4,7 +4,7 @@
 
 - Python 3.11+
 - PostgreSQL installed and running
-- Database `quiz_api` created (or create it)
+- Database `tutor` created (or create it)
 
 ## Quick Setup (5 minutes)
 
@@ -32,7 +32,7 @@ cp env.example .env
 Edit `.env` and update the `DATABASE_URL` with your actual credentials:
 
 ```bash
-DATABASE_URL=postgresql://postgres:your_password@localhost:5432/quiz_api
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/tutor
 ```
 
 **IMPORTANT:** `DATABASE_URL` is required. Alembic will fail if it's not set.
@@ -41,11 +41,11 @@ DATABASE_URL=postgresql://postgres:your_password@localhost:5432/quiz_api
 
 ```bash
 # Option 1: Using createdb
-createdb quiz_api
+createdb tutor
 
 # Option 2: Using psql
 psql -U postgres
-CREATE DATABASE quiz_api;
+CREATE DATABASE tutor;
 \q
 ```
 
@@ -72,7 +72,7 @@ alembic current
 # Or show revision number if migrations have run
 
 # Check database has tables
-psql -U postgres -d quiz_api -c "\dt"
+psql -U postgres -d tutor -c "\dt"
 ```
 
 ## Common Commands
