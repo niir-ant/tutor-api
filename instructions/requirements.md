@@ -437,23 +437,80 @@ The API will serve as a backend service for educational applications, providing:
 - **FR-12.3**: Tenant identification:
   - Each tenant has unique identifier (tenant_id)
   - Tenant code/name for display
-  - Tenant domain/subdomain (optional for custom branding)
+  - Domain-based tenant resolution (primary method)
+- **FR-12.4**: Domain-based tenant identification:
+  - Each tenant can be associated with one or more domains
+  - Domain is passed as parameter in initial API call (e.g., login, registration)
+  - Tenant is resolved based on the domain parameter
+  - All tenant-related content is presented based on the resolved tenant
+  - Domain must be validated and mapped to a tenant before processing requests
+  - Invalid or unmapped domains result in error response
 
 #### 2.12.2 Tenant Configuration
-- **FR-12.4**: Tenant configuration shall include:
+- **FR-12.5**: Tenant configuration shall include:
   - Tenant name (institution name)
   - Tenant code (unique identifier)
+  - One or more associated domains (required)
+  - Primary domain (default domain for the tenant)
   - Contact information
   - Status (active, inactive, suspended)
   - Settings (customizations, branding, features)
   - Subscription/license information
-- **FR-12.5**: Tenant lifecycle:
-  - Create tenant (by system admin)
+- **FR-12.6**: Domain management:
+  - Each tenant must have at least one domain
+  - Domains must be unique across all tenants
+  - Primary domain is used as default when multiple domains exist
+  - Additional domains can be added/removed by system admin
+  - Domain format validation (e.g., example.com, subdomain.example.com)
+  - Domain status (active, inactive)
+- **FR-12.7**: Domain-to-tenant mapping:
+  - System maintains domain-to-tenant mapping
+  - Fast lookup mechanism for domain resolution
+  - Cache domain mappings for performance
+  - Support wildcard domains (optional, future enhancement)
+- **FR-12.8**: Tenant lifecycle:
+  - Create tenant (by system admin) with at least one domain
   - Activate/deactivate tenant
   - Suspend tenant (preserve data, restrict access)
   - Archive tenant (historical data only)
+  - Add/remove domains for existing tenants
 
-#### 2.12.3 Tenant-Level Administration
+#### 2.12.3 Domain-Based Tenant Resolution
+- **FR-12.9**: Domain parameter handling:
+  - Domain parameter required in initial/unauthenticated API calls:
+    - Login
+    - Registration
+    - Password reset
+    - Public endpoints
+    - Tenant resolution
+  - Domain optional for authenticated requests (tenant_id in JWT token)
+  - Domain can be passed as:
+    - Query parameter: `?domain=example.com`
+    - Header: `X-Tenant-Domain: example.com`
+    - Path parameter: `/api/v1/{domain}/...` (optional pattern)
+  - Domain is validated against tenant domain mappings
+  - Invalid or inactive domains return appropriate error
+- **FR-12.10**: Tenant resolution process:
+  - Extract domain from request (parameter, header, or path)
+  - Lookup tenant_id from domain-to-tenant mapping
+  - Validate tenant is active
+  - Set tenant context for the request
+  - All subsequent operations use resolved tenant_id
+  - Tenant context persists for the session/request
+  - For authenticated requests, tenant_id from JWT token takes precedence over domain parameter
+- **FR-12.11**: Domain validation:
+  - Validate domain format (DNS-compliant)
+  - Check domain exists in system
+  - Verify domain is active and associated with active tenant
+  - Return clear error messages for invalid domains
+  - Support domain aliases (optional)
+- **FR-12.12**: Authenticated request handling:
+  - Authenticated requests include tenant_id in JWT token
+  - Domain parameter is optional for authenticated requests
+  - If domain is provided in authenticated request, validate it matches token's tenant_id
+  - Tenant context from token is used for all data operations
+
+#### 2.12.4 Tenant-Level Administration
 - **FR-12.6**: Support tenant-level administrators:
   - Tenant admins belong to a specific tenant
   - Tenant admins can only manage resources within their tenant
@@ -468,7 +525,7 @@ The API will serve as a backend service for educational applications, providing:
   - View tenant-level statistics and reports
   - Manage tenant-specific settings
 
-#### 2.12.4 System-Level Administration
+#### 2.12.5 System-Level Administration
 - **FR-12.8**: Support system-level administrators:
   - System admins have access across all tenants
   - System admins can create/manage tenants
@@ -741,8 +798,29 @@ POST /api/v1/auth/login
 ```json
 {
   "username": "string",  // Username or email
+  "password": "string",
+  "domain": "string"  // Required: domain to identify tenant
+}
+```
+
+**Alternative (Domain as Query Parameter):**
+```
+POST /api/v1/auth/login?domain=example.com
+```
+
+**Request Body:**
+```json
+{
+  "username": "string",
   "password": "string"
 }
+```
+
+**Alternative (Domain as Header):**
+```
+POST /api/v1/auth/login
+Headers:
+  X-Tenant-Domain: example.com
 ```
 
 **Response:**
@@ -1533,6 +1611,15 @@ GET /api/v1/system/tenants/{tenant_id}
   "name": "string",
   "description": "string",
   "status": "active|inactive|suspended",
+  "domains": [
+    {
+      "domain_id": "uuid",
+      "domain": "string",
+      "is_primary": "boolean",
+      "status": "active|inactive"
+    }
+  ],
+  "primary_domain": "string",
   "contact_info": {
     "email": "string",
     "phone": "string",
@@ -1567,6 +1654,8 @@ POST /api/v1/system/tenants
   "tenant_code": "string",  // Unique identifier
   "name": "string",  // Institution name
   "description": "string",
+  "domains": ["array"],  // Required: at least one domain, e.g., ["example.com", "www.example.com"]
+  "primary_domain": "string",  // Required: primary domain (must be in domains array)
   "contact_info": {
     "email": "string",
     "phone": "string",
@@ -1672,6 +1761,100 @@ GET /api/v1/system/tenants/{tenant_id}/statistics
     "average_score": "float",
     "completion_rate": "float"
   }
+}
+```
+
+#### 3.11.7 Add Domain to Tenant
+```
+POST /api/v1/system/tenants/{tenant_id}/domains
+```
+
+**Headers:**
+- `Authorization: Bearer {system_admin_token}`
+
+**Request Body:**
+```json
+{
+  "domain": "string",  // e.g., "newdomain.com"
+  "is_primary": "boolean"  // Optional: set as primary domain
+}
+```
+
+**Response:**
+```json
+{
+  "domain_id": "uuid",
+  "tenant_id": "uuid",
+  "domain": "string",
+  "is_primary": "boolean",
+  "status": "active",
+  "created_at": "timestamp"
+}
+```
+
+#### 3.11.8 Remove Domain from Tenant
+```
+DELETE /api/v1/system/tenants/{tenant_id}/domains/{domain_id}
+```
+
+**Headers:**
+- `Authorization: Bearer {system_admin_token}`
+
+**Response:**
+```json
+{
+  "domain_id": "uuid",
+  "status": "removed",
+  "removed_at": "timestamp"
+}
+```
+
+**Note:** Cannot remove domain if it's the only domain for the tenant. Cannot remove primary domain without setting another as primary first.
+
+#### 3.11.9 Set Primary Domain
+```
+PUT /api/v1/system/tenants/{tenant_id}/domains/{domain_id}/primary
+```
+
+**Headers:**
+- `Authorization: Bearer {system_admin_token}`
+
+**Response:**
+```json
+{
+  "domain_id": "uuid",
+  "is_primary": "true",
+  "updated_at": "timestamp"
+}
+```
+
+#### 3.11.10 Resolve Tenant from Domain
+```
+GET /api/v1/tenant/resolve?domain=example.com
+```
+
+**Headers:**
+- Optional: `Authorization: Bearer {token}` (for authenticated requests)
+
+**Response:**
+```json
+{
+  "domain": "string",
+  "tenant_id": "uuid",
+  "tenant_code": "string",
+  "tenant_name": "string",
+  "is_primary": "boolean",
+  "tenant_status": "active|inactive|suspended",
+  "domain_status": "active|inactive"
+}
+```
+
+**Error Response (Invalid Domain):**
+```json
+{
+  "error": "domain_not_found",
+  "message": "The specified domain is not associated with any tenant",
+  "domain": "string"
 }
 ```
 
@@ -2166,6 +2349,16 @@ GET /api/v1/system/audit-logs
   "name": "string",  // Institution name
   "description": "string",
   "status": "active|inactive|suspended",
+  "primary_domain": "string",  // Primary domain identifier
+  "domains": [
+    {
+      "domain_id": "uuid",
+      "domain": "string",  // e.g., "example.com", "www.example.com"
+      "is_primary": "boolean",
+      "status": "active|inactive",
+      "created_at": "timestamp"
+    }
+  ],
   "contact_info": {
     "email": "string",
     "phone": "string",
@@ -2191,6 +2384,20 @@ GET /api/v1/system/audit-logs
       "expires_at": "timestamp"
     }
   },
+  "created_at": "timestamp",
+  "updated_at": "timestamp",
+  "created_by": "uuid"  // System admin user ID
+}
+```
+
+### 4.1a Tenant Domain
+```json
+{
+  "domain_id": "uuid",
+  "tenant_id": "uuid",
+  "domain": "string",  // Unique domain name
+  "is_primary": "boolean",
+  "status": "active|inactive",
   "created_at": "timestamp",
   "updated_at": "timestamp",
   "created_by": "uuid"  // System admin user ID
@@ -2585,6 +2792,14 @@ GET /api/v1/system/audit-logs
   - Tenant-scoped access control for tenant admins
   - System-wide access for system admins only
   - Prevent tenant_id manipulation in API requests
+- **NFR-4.16**: Domain-based tenant resolution:
+  - Validate domain format (DNS-compliant)
+  - Verify domain exists and is active
+  - Cache domain-to-tenant mappings for performance
+  - Rate limit domain resolution requests
+  - Secure domain parameter handling (prevent injection)
+  - Validate tenant is active after domain resolution
+  - Return appropriate errors for invalid/inactive domains
 
 ### 6.5 Usability
 - **NFR-5.1**: RESTful API design
@@ -2622,6 +2837,17 @@ GET /api/v1/system/audit-logs
 - **TC-4.3**: Use factory pattern for question generation per subject type
 - **TC-4.4**: Support plugin/configuration-based subject extensions
 - **TC-4.5**: Maintain subject registry/configuration service
+
+### 7.5 Domain-Based Tenant Resolution
+- **TC-5.1**: Implement domain-to-tenant mapping service
+- **TC-5.2**: Cache domain mappings (Redis or in-memory cache)
+- **TC-5.3**: Support domain resolution from multiple sources:
+  - Query parameter
+  - HTTP header
+  - Path parameter (optional)
+- **TC-5.4**: Domain validation middleware/interceptor
+- **TC-5.5**: Fast lookup mechanism for domain resolution (O(1) or O(log n))
+- **TC-5.6**: Domain format validation (regex or DNS library)
 
 ### 7.2 Code Execution Security
 - **TC-2.1**: Sandboxed execution environment for Python code
@@ -2805,7 +3031,7 @@ GET /api/v1/system/audit-logs
 ---
 
 ## Document Version
-- **Version**: 1.4
+- **Version**: 1.5
 - **Date**: 2024
 - **Author**: Requirements Team
 - **Status**: Draft
@@ -2814,4 +3040,5 @@ GET /api/v1/system/audit-logs
   - v1.2: Added Subject Management requirements (Section 2.8), Subject Management endpoints (Section 3.8), Subject data model (Section 4.9), updated Question and Quiz Session models to reference subjects, updated API endpoints to use subject_id/subject_code, added Extensibility requirements (Section 6.7), and added Extensibility Architecture constraints (Section 7.4).
   - v1.3: Added Tutor Management requirements (Section 2.9), Messaging System requirements (Section 2.10), Administrator Management requirements (Section 2.11), Role-Based Access Control requirements (Section 2.12), Tutor Management endpoints (Section 3.9), Messaging endpoints (Section 3.10), Administrator endpoints (Section 3.11), Tutor Account data model (Section 4.10), Administrator Account data model (Section 4.11), Student-Tutor Assignment model (Section 4.12), Message data model (Section 4.13), Audit Log model (Section 4.14), updated Student Account model to include role and assigned_tutor_id, updated authentication to support multiple roles, updated Security, Integration, and Testing sections for role-based access and messaging.
   - v1.4: Added Tenant Management requirements (Section 2.12), updated Role-Based Access Control (Section 2.13) to include tenant_admin role, added Tenant Management endpoints (Section 3.11), separated System Administrator endpoints (Section 3.12) and Tenant Administrator endpoints (Section 3.13), added Tenant data model (Section 4.1), updated all data models to include tenant_id for multi-tenancy support, updated authentication response to include tenant_id, added tenant isolation security requirements (NFR-4.15), and renumbered subsequent data model sections.
+  - v1.5: Added domain-based tenant identification (Section 2.12.3), updated Tenant Management to include domain requirements (Section 2.12.2), added domain management endpoints (Sections 3.11.7-3.11.10), added domain resolution endpoint, updated Tenant data model to include domains (Section 4.1), added Tenant Domain data model (Section 4.1a), updated login endpoint to accept domain parameter, added domain-based tenant resolution security requirements (NFR-4.16), and added domain resolution architecture constraints (Section 7.5).
 
