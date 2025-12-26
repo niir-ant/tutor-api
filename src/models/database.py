@@ -196,3 +196,145 @@ class PasswordResetOTP(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     used_at = Column(DateTime(timezone=True))
 
+
+class Hint(Base):
+    """Hint model"""
+    __tablename__ = "hints"
+    
+    hint_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    question_id = Column(UUID(as_uuid=True), ForeignKey("questions.question_id"), nullable=False)
+    hint_level = Column(Integer, nullable=False)
+    hint_text = Column(Text, nullable=False)
+    generated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class StudentProgress(Base):
+    """Student progress model"""
+    __tablename__ = "student_progress"
+    
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_accounts.student_id"), primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    subject_stats = Column(JSON, default={})
+    last_updated = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class StudentTutorAssignment(Base):
+    """Student-tutor assignment model"""
+    __tablename__ = "student_tutor_assignments"
+    
+    assignment_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_accounts.student_id"), nullable=False)
+    tutor_id = Column(UUID(as_uuid=True), ForeignKey("tutor_accounts.tutor_id"), nullable=False)
+    status = Column(String(50), default="active")
+    assigned_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    assigned_by = Column(UUID(as_uuid=True), nullable=False)
+    deactivated_at = Column(DateTime(timezone=True))
+    deactivated_by = Column(UUID(as_uuid=True))
+    notes = Column(Text)
+
+
+class Message(Base):
+    """Message model"""
+    __tablename__ = "messages"
+    
+    message_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    sender_id = Column(UUID(as_uuid=True), nullable=False)
+    sender_role = Column(SQLEnum(UserRole), nullable=False)
+    recipient_id = Column(UUID(as_uuid=True), nullable=False)
+    recipient_role = Column(SQLEnum(UserRole), nullable=False)
+    content = Column(Text, nullable=False)
+    status = Column(String(50), default="sent")
+    email_sent = Column(Boolean, default=False)
+    email_sent_at = Column(DateTime(timezone=True))
+    read_at = Column(DateTime(timezone=True))
+    subject_reference = Column(UUID(as_uuid=True), ForeignKey("subjects.subject_id"), nullable=True)
+    question_reference = Column(UUID(as_uuid=True), ForeignKey("questions.question_id"), nullable=True)
+    conversation_id = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = Column(DateTime(timezone=True))
+
+
+class Competition(Base):
+    """Competition model"""
+    __tablename__ = "competitions"
+    
+    competition_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    subject_id = Column(UUID(as_uuid=True), ForeignKey("subjects.subject_id"), nullable=False)
+    status = Column(String(50), default="upcoming")
+    start_date = Column(DateTime(timezone=True), nullable=False)
+    end_date = Column(DateTime(timezone=True), nullable=False)
+    registration_start = Column(DateTime(timezone=True), nullable=False)
+    registration_end = Column(DateTime(timezone=True), nullable=False)
+    rules = Column(JSON)
+    eligibility = Column(JSON)
+    visibility = Column(String(50), default="public")
+    max_participants = Column(Integer)
+    participant_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(UUID(as_uuid=True))
+    cancelled_at = Column(DateTime(timezone=True))
+    cancelled_by = Column(UUID(as_uuid=True))
+    cancellation_reason = Column(Text)
+
+
+class CompetitionRegistration(Base):
+    """Competition registration model"""
+    __tablename__ = "competition_registrations"
+    
+    registration_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    competition_id = Column(UUID(as_uuid=True), ForeignKey("competitions.competition_id"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_accounts.student_id"), nullable=False)
+    status = Column(String(50), default="registered")
+    registered_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    confirmed_at = Column(DateTime(timezone=True))
+    cancelled_at = Column(DateTime(timezone=True))
+    cancelled_by = Column(UUID(as_uuid=True))
+    waitlist_position = Column(Integer)
+    notes = Column(Text)
+
+
+class CompetitionSession(Base):
+    """Competition session model"""
+    __tablename__ = "competition_sessions"
+    
+    competition_session_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    competition_id = Column(UUID(as_uuid=True), ForeignKey("competitions.competition_id"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_accounts.student_id"), nullable=False)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("quiz_sessions.session_id"), nullable=False)
+    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at = Column(DateTime(timezone=True))
+    time_limit = Column(Integer)
+    score = Column(Integer, default=0)
+    max_score = Column(Integer, default=0)
+    accuracy = Column(Integer)
+    completion_time = Column(Integer)
+    questions_answered = Column(Integer, default=0)
+    status = Column(String(50), default="in_progress")
+
+
+class AuditLog(Base):
+    """Audit log model"""
+    __tablename__ = "audit_logs"
+    
+    log_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=True)
+    action = Column(String(100), nullable=False)
+    performed_by = Column(UUID(as_uuid=True), nullable=False)
+    performed_by_role = Column(SQLEnum(UserRole), nullable=False)
+    target_type = Column(String(50))
+    target_id = Column(UUID(as_uuid=True))
+    details = Column(JSON)
+    ip_address = Column(String(50))
+    user_agent = Column(String(255))
+    timestamp = Column(DateTime(timezone=True), default=datetime.utcnow)
+
