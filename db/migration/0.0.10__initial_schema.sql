@@ -1,6 +1,6 @@
 -- Migration: 0.0.10__initial_schema.sql
 -- Description: Initial database schema for Quiz API with multi-tenancy support
--- Created: 2024
+-- Created: 2025
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

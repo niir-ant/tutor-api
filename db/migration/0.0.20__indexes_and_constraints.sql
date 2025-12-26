@@ -1,6 +1,6 @@
 -- Migration: 0.0.20__indexes_and_constraints.sql
 -- Description: Indexes and additional constraints for performance and data integrity
--- Created: 2024
+-- Created: 2025
 
 -- ============================================================================
 -- TENANT INDEXES

@@ -1,6 +1,6 @@
 -- Migration: 0.0.40__roles_and_permissions.sql
 -- Description: Database roles and permissions for application users
--- Created: 2024
+-- Created: 2025
 
 -- ============================================================================
 -- CREATE APPLICATION ROLES

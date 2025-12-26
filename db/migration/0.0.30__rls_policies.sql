@@ -1,6 +1,6 @@
 -- Migration: 0.0.30__rls_policies.sql
 -- Description: Row Level Security (RLS) policies for multi-tenant data isolation
--- Created: 2024
+-- Created: 2025
 
 -- ============================================================================
 -- ENABLE ROW LEVEL SECURITY
