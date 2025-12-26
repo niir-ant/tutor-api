@@ -6,23 +6,44 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 from typing import Generator
+import json
 
 from src.core.config import settings
 
+# #region agent log
+log_path = "/Users/pavnitbhatia/atduty/github/code/tutor-api/.cursor/debug.log"
+def _log(hypothesis_id, location, message, data):
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"sessionId": "debug-session", "runId": "run1", "hypothesisId": hypothesis_id, "location": location, "message": message, "data": data, "timestamp": int(__import__("time").time() * 1000)}) + "\n")
+    except: pass
+_log("D", "database.py:import", "Database module importing", {"database_url_exists": bool(settings.DATABASE_URL), "database_url_preview": settings.DATABASE_URL[:50] + "..." if settings.DATABASE_URL and len(settings.DATABASE_URL) > 50 else settings.DATABASE_URL})
+# #endregion
+
 # Create engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    poolclass=NullPool,
-    echo=settings.DEBUG,
-    future=True,
-)
+try:
+    # #region agent log
+    _log("D", "database.py:create_engine", "About to create engine", {"database_url": settings.DATABASE_URL[:50] + "..." if settings.DATABASE_URL and len(settings.DATABASE_URL) > 50 else settings.DATABASE_URL})
+    # #endregion
+    engine = create_engine(
+        settings.DATABASE_URL,
+        poolclass=NullPool,
+        echo=settings.DEBUG,
+    )
+    # #region agent log
+    _log("D", "database.py:create_engine", "Engine created successfully", {})
+    # #endregion
+except Exception as e:
+    # #region agent log
+    _log("D", "database.py:create_engine", "Engine creation failed", {"error": str(e), "error_type": type(e).__name__})
+    # #endregion
+    raise
 
 # Session factory
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
     bind=engine,
-    future=True,
 )
 
 # Base class for models
@@ -49,7 +70,10 @@ async def init_db():
     pass
 
 
-@event.listens_for(engine.sync_engine, "connect")
+# #region agent log
+_log("D", "database.py:before_event_listener", "About to register event listener", {"engine_type": type(engine).__name__})
+# #endregion
+@event.listens_for(engine, "connect")
 def set_search_path(dbapi_conn, connection_record):
     """
     Set PostgreSQL session variables for RLS
@@ -60,4 +84,7 @@ def set_search_path(dbapi_conn, connection_record):
     # dbapi_conn.cursor().execute("SET app.current_user_id = %s", (user_id,))
     # dbapi_conn.cursor().execute("SET app.current_user_role = %s", (role,))
     pass
+# #region agent log
+_log("D", "database.py:after_event_listener", "Event listener registered successfully", {})
+# #endregion
 

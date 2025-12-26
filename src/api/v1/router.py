@@ -2,23 +2,43 @@
 Main API router
 """
 from fastapi import APIRouter
+import json
 
-from src.api.v1.endpoints import (
-    auth,
-    questions,
-    answers,
-    hints,
-    sessions,
-    progress,
-    students,
-    tutors,
-    messages,
-    subjects,
-    competitions,
-    tenants,
-    system_admin,
-    tenant_admin,
-)
+# #region agent log
+log_path = "/Users/pavnitbhatia/atduty/github/code/tutor-api/.cursor/debug.log"
+def _log(hypothesis_id, location, message, data):
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"sessionId": "debug-session", "runId": "run1", "hypothesisId": hypothesis_id, "location": location, "message": message, "data": data, "timestamp": int(__import__("time").time() * 1000)}) + "\n")
+    except: pass
+_log("D", "router.py:import", "Router module importing", {})
+# #endregion
+
+try:
+    from src.api.v1.endpoints import (
+        auth,
+        questions,
+        answers,
+        hints,
+        sessions,
+        progress,
+        students,
+        tutors,
+        messages,
+        subjects,
+        competitions,
+        tenants,
+        system_admin,
+        tenant_admin,
+    )
+    # #region agent log
+    _log("D", "router.py:import", "All endpoints imported successfully", {})
+    # #endregion
+except Exception as e:
+    # #region agent log
+    _log("D", "router.py:import", "Endpoints import failed", {"error": str(e), "error_type": type(e).__name__})
+    # #endregion
+    raise
 
 api_router = APIRouter()
 

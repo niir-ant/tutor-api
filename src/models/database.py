@@ -121,7 +121,7 @@ class Subject(Base):
     supported_question_types = Column(JSON)  # Array of strings
     answer_validation_method = Column(String(50))
     settings = Column(JSON)
-    metadata = Column(JSON)
+    extra_metadata = Column("metadata", JSON)  # Column name in DB is 'metadata', but attribute name is 'extra_metadata' to avoid SQLAlchemy conflict
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -139,7 +139,7 @@ class Question(Base):
     question_text = Column(Text, nullable=False)
     options = Column(JSON)  # Array of strings for multiple choice
     correct_answer = Column(JSON)  # Can be string or object
-    metadata = Column(JSON)
+    extra_metadata = Column("metadata", JSON)  # Column name in DB is 'metadata', but attribute name is 'extra_metadata' to avoid SQLAlchemy conflict
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
