@@ -54,10 +54,21 @@ CREATE DATABASE quiz_api;
 
 Execute all migration files in order.
 
-### 3. Update Passwords
+### 3. Configure Environment Variables
 
-**IMPORTANT**: Change default passwords in `0.0.40__roles_and_permissions.sql`:
+**IMPORTANT**: Create a `.env` file from `env.example` and configure:
 
+1. **DATABASE_URL** (required) - Your PostgreSQL connection string
+2. **Database role passwords** - Set in `.env`:
+   - `DB_APP_USER_PASSWORD`
+   - `DB_APP_READONLY_PASSWORD`
+   - `DB_APP_MIGRATOR_PASSWORD`
+
+Then either:
+- Manually update `0.0.40__roles_and_permissions.sql` with your passwords, OR
+- Use the helper script: `python scripts/prepare_migration_with_env.py`
+
+After running migrations, update passwords:
 ```sql
 ALTER ROLE app_user WITH PASSWORD 'your_secure_password';
 ALTER ROLE app_readonly WITH PASSWORD 'your_secure_password';
