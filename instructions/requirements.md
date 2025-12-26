@@ -291,9 +291,127 @@ The API will serve as a backend service for educational applications, providing:
   - Valid question types for subject
   - Valid answer validation method
 
-### 2.9 Tutor Management
+### 2.9 Competition Management
 
-#### 2.9.1 Tutor Account Management
+#### 2.9.1 Competition Concept
+- **FR-9.1**: Support one-time competitions per subject
+- **FR-9.2**: Competition characteristics:
+  - Each competition is associated with a single subject
+  - One-time event (not recurring)
+  - Time-bound with start and end dates/times
+  - Multiple students can participate
+  - Competitive scoring and leaderboards
+  - Winners/rankings based on performance
+- **FR-9.3**: Competition lifecycle:
+  - Upcoming: Competition created but not yet started
+  - Active: Competition is currently running (between start and end time)
+  - Ended: Competition has completed, results finalized
+  - Cancelled: Competition cancelled before or during execution
+
+#### 2.9.2 Competition Configuration
+- **FR-9.4**: Competition configuration shall include:
+  - Competition name and description
+  - Subject association (one subject per competition)
+  - Start date and time
+  - End date and time
+  - Registration period (registration start/end times)
+  - Competition rules:
+    - Time limit per question or total time limit
+    - Number of questions
+    - Difficulty level(s)
+    - Allowed question types
+    - Maximum attempts (typically 1 for competitions)
+    - Scoring rules (points per question, bonus points, penalties)
+  - Eligibility criteria:
+    - Grade level restrictions (optional)
+    - Tenant restrictions (tenant-specific or system-wide)
+    - Minimum requirements (optional)
+- **FR-9.5**: Competition visibility and access:
+  - Public (visible to all eligible students)
+  - Private (invitation-only)
+  - Tenant-specific (only students in specific tenant)
+  - Grade-level specific (only students in specific grades)
+
+#### 2.9.3 Competition Registration
+- **FR-9.6**: Student registration for competitions:
+  - Students can register for competitions during registration period
+  - Registration validation:
+    - Check eligibility (grade level, tenant, etc.)
+    - Verify competition is accepting registrations
+    - Prevent duplicate registrations
+    - Check maximum participant limits (if set)
+  - Track registration status (registered, confirmed, cancelled)
+- **FR-9.7**: Registration management:
+  - View registered participants
+  - Cancel registrations (by student or admin)
+  - Waitlist support (optional, if participant limit reached)
+  - Send registration confirmations
+
+#### 2.9.4 Competition Sessions
+- **FR-9.8**: Competition-specific quiz sessions:
+  - Competition sessions are separate from regular quiz sessions
+  - Students can start competition session only during active period
+  - One attempt per student (or configurable max attempts)
+  - Competition sessions use competition-specific rules
+  - Questions generated based on competition configuration
+  - Time tracking for competition sessions
+- **FR-9.9**: Competition session constraints:
+  - Cannot start session before competition start time
+  - Cannot start session after competition end time
+  - Session must be completed within competition time window
+  - No hints allowed (configurable)
+  - No narrative access during competition (configurable)
+  - Strict time limits enforced
+
+#### 2.9.5 Competition Leaderboards
+- **FR-9.10**: Real-time and final leaderboards:
+  - Real-time leaderboard updates during active competition
+  - Final leaderboard after competition ends
+  - Ranking based on:
+    - Total score (primary)
+    - Accuracy percentage (tie-breaker)
+    - Completion time (tie-breaker, if applicable)
+  - Leaderboard visibility:
+    - Public (visible to all)
+    - Participants only
+    - Private (admin only)
+- **FR-9.11**: Leaderboard features:
+  - Top N participants display
+  - Student's own rank and position
+  - Filter by grade level (if applicable)
+  - Pagination for large competitions
+  - Export leaderboard data (admin)
+
+#### 2.9.6 Competition Results and Winners
+- **FR-9.12**: Competition results:
+  - Final rankings after competition ends
+  - Winner determination (top N participants)
+  - Prize/recognition assignment (optional)
+  - Individual student results
+  - Competition statistics (participation rate, average score, etc.)
+- **FR-9.13**: Results distribution:
+  - Automatic results announcement after competition ends
+  - Email notifications to participants (optional)
+  - Results available for viewing
+  - Certificate generation (optional, future enhancement)
+
+#### 2.9.7 Competition Administration
+- **FR-9.14**: Admin capabilities for competitions:
+  - Create competitions (tenant admin or system admin)
+  - Update competition configuration (before start)
+  - Cancel competitions
+  - View all registrations
+  - Monitor active competitions
+  - View competition analytics and statistics
+  - Export competition data
+- **FR-9.15**: Competition management constraints:
+  - Cannot modify competition after it has started
+  - Cannot delete competitions with existing participants
+  - Archive completed competitions (preserve data)
+
+### 2.10 Tutor Management
+
+#### 2.10.1 Tutor Account Management
 - **FR-9.1**: Support tutor account creation and management
 - **FR-9.2**: Tutor accounts shall have:
   - Unique tutor identifier
@@ -301,26 +419,26 @@ The API will serve as a backend service for educational applications, providing:
   - Tutor profile information (name, email, contact details)
   - Account status (active, inactive, suspended)
   - Assigned students (team of students)
-- **FR-9.3**: Tutor account creation:
+- **FR-10.3**: Tutor account creation:
   - Can be created by administrators
   - Can be converted from existing student account (by admin)
   - Requires password setup (similar to student accounts)
   - Can have preset account creation with first-time password change
 
-#### 2.9.2 Student-Tutor Assignment
-- **FR-9.4**: Support assignment of students to tutors:
+#### 2.10.2 Student-Tutor Assignment
+- **FR-10.4**: Support assignment of students to tutors:
   - One tutor can have multiple students (team)
   - One student can be assigned to one tutor (or optionally multiple tutors)
   - Assignment managed by administrators
   - Track assignment history (when assigned, by whom)
-- **FR-9.5**: Tutor team management:
+- **FR-10.5**: Tutor team management:
   - View all assigned students
   - View student progress and performance
   - Filter and search students in team
   - Get team statistics and analytics
 
-#### 2.9.3 Tutor Capabilities
-- **FR-9.6**: Tutors shall be able to:
+#### 2.10.3 Tutor Capabilities
+- **FR-10.6**: Tutors shall be able to:
   - View assigned students' progress and performance
   - View student quiz history and results
   - Access student analytics and reports
@@ -328,11 +446,11 @@ The API will serve as a backend service for educational applications, providing:
   - Receive and respond to messages from assigned students
   - View messaging history with students
 
-### 2.10 Messaging System
+### 2.11 Messaging System
 
-#### 2.10.1 Student-Tutor Messaging
-- **FR-10.1**: Support bidirectional messaging between students and tutors
-- **FR-10.2**: Message requirements:
+#### 2.11.1 Student-Tutor Messaging
+- **FR-11.1**: Support bidirectional messaging between students and tutors
+- **FR-11.2**: Message requirements:
   - Student can send messages to their assigned tutor
   - Tutor can send messages to any assigned student
   - Messages include: sender, recipient, content, timestamp
@@ -347,7 +465,7 @@ The API will serve as a backend service for educational applications, providing:
   - Message persistence in database
   - Message history and conversation threads
 
-#### 2.10.2 Email Integration for Messages
+#### 2.11.2 Email Integration for Messages
 - **FR-10.5**: Support email copy option for messages:
   - Sender can choose to send email copy when sending message
   - Email copy sent to recipient's registered email address
@@ -358,17 +476,17 @@ The API will serve as a backend service for educational applications, providing:
   - Options: immediate, digest, disabled
   - Email templates for different message types
 
-#### 2.10.3 Message Management
-- **FR-10.7**: Message operations:
+#### 2.11.3 Message Management
+- **FR-11.7**: Message operations:
   - Mark messages as read/unread
   - Delete messages (soft delete, preserve history)
   - Search messages by content, sender, date
   - Filter messages by conversation thread
   - Archive conversations
 
-### 2.11 Administrator Management
+### 2.12 Administrator Management
 
-#### 2.11.1 Admin Account Management
+#### 2.12.1 Admin Account Management
 - **FR-11.1**: Support administrator account creation and management
 - **FR-11.2**: Admin accounts shall have:
   - Unique admin identifier
@@ -381,7 +499,7 @@ The API will serve as a backend service for educational applications, providing:
   - Requires secure setup process
   - Can be preset with first-time password change
 
-#### 2.11.2 Account Management Capabilities
+#### 2.12.2 Account Management Capabilities
 - **FR-11.4**: Administrators shall be able to:
   - Create student accounts (preset accounts)
   - Create tutor accounts
@@ -396,7 +514,7 @@ The API will serve as a backend service for educational applications, providing:
   - Track enable/disable history (who, when, why)
   - Preserve account data when disabled
 
-#### 2.11.3 Course/Subject Management Capabilities
+#### 2.12.3 Course/Subject Management Capabilities
 - **FR-11.6**: Administrators shall be able to:
   - Create new subjects/courses
   - Update subject configurations
@@ -409,36 +527,36 @@ The API will serve as a backend service for educational applications, providing:
   - Track enable/disable history
   - Prevent deletion of subjects with existing data
 
-#### 2.11.4 Student-Tutor Assignment Management
-- **FR-11.8**: Administrators shall be able to:
+#### 2.12.4 Student-Tutor Assignment Management
+- **FR-12.8**: Administrators shall be able to:
   - Assign students to tutors
   - Reassign students to different tutors
   - Remove student-tutor assignments
   - View all assignments and team compositions
   - Bulk assignment operations
 
-#### 2.11.5 Application Management
-- **FR-11.9**: Administrators shall have access to:
+#### 2.12.5 Application Management
+- **FR-12.9**: Administrators shall have access to:
   - System-wide statistics and analytics
   - User activity monitoring
   - System configuration settings
   - Audit logs and activity history
   - Backup and maintenance operations
 
-### 2.12 Tenant Management
+### 2.13 Tenant Management
 
-#### 2.12.1 Tenant Concept
-- **FR-12.1**: Support multi-tenant architecture where each tenant represents an educational institution
-- **FR-12.2**: Tenant isolation requirements:
+#### 2.13.1 Tenant Concept
+- **FR-13.1**: Support multi-tenant architecture where each tenant represents an educational institution
+- **FR-13.2**: Tenant isolation requirements:
   - Each tenant has isolated data (students, tutors, sessions, progress)
   - Students and tutors belong to a single tenant
   - Data access is scoped to tenant (tenant isolation)
   - Cross-tenant data access is prevented
-- **FR-12.3**: Tenant identification:
+- **FR-13.3**: Tenant identification:
   - Each tenant has unique identifier (tenant_id)
   - Tenant code/name for display
   - Domain-based tenant resolution (primary method)
-- **FR-12.4**: Domain-based tenant identification:
+- **FR-13.4**: Domain-based tenant identification:
   - Each tenant can be associated with one or more domains
   - Domain is passed as parameter in initial API call (e.g., login, registration)
   - Tenant is resolved based on the domain parameter
@@ -446,8 +564,8 @@ The API will serve as a backend service for educational applications, providing:
   - Domain must be validated and mapped to a tenant before processing requests
   - Invalid or unmapped domains result in error response
 
-#### 2.12.2 Tenant Configuration
-- **FR-12.5**: Tenant configuration shall include:
+#### 2.13.2 Tenant Configuration
+- **FR-13.5**: Tenant configuration shall include:
   - Tenant name (institution name)
   - Tenant code (unique identifier)
   - One or more associated domains (required)
@@ -456,27 +574,27 @@ The API will serve as a backend service for educational applications, providing:
   - Status (active, inactive, suspended)
   - Settings (customizations, branding, features)
   - Subscription/license information
-- **FR-12.6**: Domain management:
+- **FR-13.6**: Domain management:
   - Each tenant must have at least one domain
   - Domains must be unique across all tenants
   - Primary domain is used as default when multiple domains exist
   - Additional domains can be added/removed by system admin
   - Domain format validation (e.g., example.com, subdomain.example.com)
   - Domain status (active, inactive)
-- **FR-12.7**: Domain-to-tenant mapping:
+- **FR-13.7**: Domain-to-tenant mapping:
   - System maintains domain-to-tenant mapping
   - Fast lookup mechanism for domain resolution
   - Cache domain mappings for performance
   - Support wildcard domains (optional, future enhancement)
-- **FR-12.8**: Tenant lifecycle:
+- **FR-13.8**: Tenant lifecycle:
   - Create tenant (by system admin) with at least one domain
   - Activate/deactivate tenant
   - Suspend tenant (preserve data, restrict access)
   - Archive tenant (historical data only)
   - Add/remove domains for existing tenants
 
-#### 2.12.3 Domain-Based Tenant Resolution
-- **FR-12.9**: Domain parameter handling:
+#### 2.13.3 Domain-Based Tenant Resolution
+- **FR-13.9**: Domain parameter handling:
   - Domain parameter required in initial/unauthenticated API calls:
     - Login
     - Registration
@@ -490,7 +608,7 @@ The API will serve as a backend service for educational applications, providing:
     - Path parameter: `/api/v1/{domain}/...` (optional pattern)
   - Domain is validated against tenant domain mappings
   - Invalid or inactive domains return appropriate error
-- **FR-12.10**: Tenant resolution process:
+- **FR-13.10**: Tenant resolution process:
   - Extract domain from request (parameter, header, or path)
   - Lookup tenant_id from domain-to-tenant mapping
   - Validate tenant is active
@@ -498,26 +616,26 @@ The API will serve as a backend service for educational applications, providing:
   - All subsequent operations use resolved tenant_id
   - Tenant context persists for the session/request
   - For authenticated requests, tenant_id from JWT token takes precedence over domain parameter
-- **FR-12.11**: Domain validation:
+- **FR-13.11**: Domain validation:
   - Validate domain format (DNS-compliant)
   - Check domain exists in system
   - Verify domain is active and associated with active tenant
   - Return clear error messages for invalid domains
   - Support domain aliases (optional)
-- **FR-12.12**: Authenticated request handling:
+- **FR-13.12**: Authenticated request handling:
   - Authenticated requests include tenant_id in JWT token
   - Domain parameter is optional for authenticated requests
   - If domain is provided in authenticated request, validate it matches token's tenant_id
   - Tenant context from token is used for all data operations
 
-#### 2.12.4 Tenant-Level Administration
-- **FR-12.6**: Support tenant-level administrators:
+#### 2.13.4 Tenant-Level Administration
+- **FR-13.13**: Support tenant-level administrators:
   - Tenant admins belong to a specific tenant
   - Tenant admins can only manage resources within their tenant
   - Tenant admins can create/manage student and tutor accounts (within tenant)
   - Tenant admins cannot access other tenants' data
   - Tenant admins cannot manage system-level settings
-- **FR-12.7**: Tenant admin capabilities:
+- **FR-13.14**: Tenant admin capabilities:
   - Create student accounts (within tenant)
   - Create tutor accounts (within tenant)
   - Assign students to tutors (within tenant)
@@ -525,8 +643,8 @@ The API will serve as a backend service for educational applications, providing:
   - View tenant-level statistics and reports
   - Manage tenant-specific settings
 
-#### 2.12.5 System-Level Administration
-- **FR-12.8**: Support system-level administrators:
+#### 2.13.5 System-Level Administration
+- **FR-13.15**: Support system-level administrators:
   - System admins have access across all tenants
   - System admins can create/manage tenants
   - System admins can create tenant admin accounts
@@ -534,29 +652,29 @@ The API will serve as a backend service for educational applications, providing:
   - System admins can manage system-wide subjects/courses
   - System admins can view system-wide statistics
 
-### 2.13 Role-Based Access Control
+### 2.14 Role-Based Access Control
 
-#### 2.13.1 User Roles
-- **FR-13.1**: Support four primary roles:
+#### 2.14.1 User Roles
+- **FR-14.1**: Support four primary roles:
   - Student: Can take quizzes, view own progress, message tutor (within tenant)
   - Tutor: Can view assigned students' progress, message students, respond to messages (within tenant)
   - Tenant Admin: Manage accounts and courses within their tenant only
   - System Admin: Full system access, manage tenants, all accounts, system-wide courses
-- **FR-13.2**: Role-based permissions:
+- **FR-14.2**: Role-based permissions:
   - Each role has specific API endpoint access
   - Role validation on all protected endpoints
   - Hierarchical permissions (system admin > tenant admin > tutor > student)
   - Tenant-scoped permissions for tenant admin, tutor, and student
 
-#### 2.13.2 Access Control
-- **FR-13.3**: Enforce access control:
+#### 2.14.2 Access Control
+- **FR-14.3**: Enforce access control:
   - Students can only access their own data within their tenant
   - Tutors can only access their assigned students' data within their tenant
   - Tenant admins can only access data within their tenant
   - System admins can access all data across all tenants
   - Prevent unauthorized cross-tenant data access
   - Audit access attempts with tenant context
-- **FR-13.4**: Tenant isolation enforcement:
+- **FR-14.4**: Tenant isolation enforcement:
   - All data queries must include tenant_id filter
   - API responses must only include tenant-scoped data
   - Prevent tenant_id manipulation in API requests
@@ -1252,7 +1370,376 @@ GET /api/v1/admin/subjects/{subject_id}/statistics
 }
 ```
 
-### 3.9 Tutor Management Endpoints
+### 3.9 Competition Endpoints
+
+#### 3.9.1 List Competitions
+```
+GET /api/v1/competitions
+```
+
+**Query Parameters:**
+- `subject_id` (optional: filter by subject)
+- `status` (optional: upcoming, active, ended, cancelled, all)
+- `tenant_id` (optional: filter by tenant, for system admin)
+
+**Response:**
+```json
+{
+  "competitions": [
+    {
+      "competition_id": "uuid",
+      "name": "string",
+      "subject_id": "uuid",
+      "subject_code": "string",
+      "status": "upcoming|active|ended|cancelled",
+      "start_date": "timestamp",
+      "end_date": "timestamp",
+      "registration_start": "timestamp",
+      "registration_end": "timestamp",
+      "participant_count": "integer",
+      "created_at": "timestamp"
+    }
+  ],
+  "total": "integer"
+}
+```
+
+#### 3.9.2 Get Competition
+```
+GET /api/v1/competitions/{competition_id}
+```
+
+**Response:**
+```json
+{
+  "competition_id": "uuid",
+  "tenant_id": "uuid",
+  "name": "string",
+  "description": "string",
+  "subject_id": "uuid",
+  "subject_code": "string",
+  "status": "upcoming|active|ended|cancelled",
+  "start_date": "timestamp",
+  "end_date": "timestamp",
+  "registration_start": "timestamp",
+  "registration_end": "timestamp",
+  "rules": {
+    "time_limit": "integer",
+    "num_questions": "integer",
+    "difficulty": "string",
+    "allowed_question_types": ["array"],
+    "max_attempts": "integer",
+    "scoring_rules": "object",
+    "hints_allowed": "boolean",
+    "narratives_allowed": "boolean"
+  },
+  "eligibility": {
+    "grade_levels": ["array"],
+    "tenant_restrictions": ["array"],
+    "minimum_requirements": "object"
+  },
+  "visibility": "public|private|tenant_specific",
+  "participant_count": "integer",
+  "max_participants": "integer",
+  "created_at": "timestamp",
+  "updated_at": "timestamp"
+}
+```
+
+#### 3.9.3 Create Competition
+```
+POST /api/v1/admin/competitions
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Request Body:**
+```json
+{
+  "name": "string",
+  "description": "string",
+  "subject_id": "uuid",
+  "start_date": "timestamp",
+  "end_date": "timestamp",
+  "registration_start": "timestamp",
+  "registration_end": "timestamp",
+  "rules": {
+    "time_limit": "integer",
+    "num_questions": "integer",
+    "difficulty": "beginner|intermediate|advanced",
+    "allowed_question_types": ["array"],
+    "max_attempts": "integer",
+    "scoring_rules": "object",
+    "hints_allowed": "boolean",
+    "narratives_allowed": "boolean"
+  },
+  "eligibility": {
+    "grade_levels": ["array"],
+    "tenant_restrictions": ["array"],
+    "minimum_requirements": "object"
+  },
+  "visibility": "public|private|tenant_specific",
+  "max_participants": "integer"
+}
+```
+
+**Response:**
+```json
+{
+  "competition_id": "uuid",
+  "name": "string",
+  "status": "upcoming",
+  "created_at": "timestamp"
+}
+```
+
+#### 3.9.4 Update Competition
+```
+PUT /api/v1/admin/competitions/{competition_id}
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Request Body:**
+```json
+{
+  "name": "string",
+  "description": "string",
+  "start_date": "timestamp",
+  "end_date": "timestamp",
+  "registration_start": "timestamp",
+  "registration_end": "timestamp",
+  "rules": "object",
+  "eligibility": "object",
+  "visibility": "string",
+  "max_participants": "integer"
+}
+```
+
+**Note:** Cannot update competition after it has started.
+
+#### 3.9.5 Cancel Competition
+```
+POST /api/v1/admin/competitions/{competition_id}/cancel
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Request Body:**
+```json
+{
+  "reason": "string"
+}
+```
+
+**Response:**
+```json
+{
+  "competition_id": "uuid",
+  "status": "cancelled",
+  "cancelled_at": "timestamp",
+  "reason": "string"
+}
+```
+
+#### 3.9.6 Register for Competition
+```
+POST /api/v1/competitions/{competition_id}/register
+```
+
+**Request Body:**
+```json
+{}
+```
+
+**Response:**
+```json
+{
+  "registration_id": "uuid",
+  "competition_id": "uuid",
+  "student_id": "uuid",
+  "status": "registered",
+  "registered_at": "timestamp"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Registration period closed, already registered, not eligible
+- `403 Forbidden`: Maximum participants reached
+
+#### 3.9.7 Cancel Registration
+```
+DELETE /api/v1/competitions/{competition_id}/register
+```
+
+**Response:**
+```json
+{
+  "registration_id": "uuid",
+  "status": "cancelled",
+  "cancelled_at": "timestamp"
+}
+```
+
+#### 3.9.8 Get Competition Leaderboard
+```
+GET /api/v1/competitions/{competition_id}/leaderboard
+```
+
+**Query Parameters:**
+- `type` (optional: real_time, final, default: real_time for active, final for ended)
+- `limit` (optional: default 100)
+- `offset` (optional: default 0)
+- `grade_level` (optional: filter by grade level)
+
+**Response:**
+```json
+{
+  "competition_id": "uuid",
+  "type": "real_time|final",
+  "last_updated": "timestamp",
+  "leaderboard": [
+    {
+      "rank": "integer",
+      "student_id": "uuid",
+      "student_name": "string",
+      "score": "float",
+      "max_score": "float",
+      "accuracy": "float",
+      "completion_time": "integer",
+      "questions_answered": "integer",
+      "completed_at": "timestamp"
+    }
+  ],
+  "total_participants": "integer",
+  "user_rank": "integer",
+  "user_position": "object"
+}
+```
+
+#### 3.9.9 Start Competition Session
+```
+POST /api/v1/competitions/{competition_id}/start
+```
+
+**Request Body:**
+```json
+{}
+```
+
+**Response:**
+```json
+{
+  "competition_session_id": "uuid",
+  "competition_id": "uuid",
+  "student_id": "uuid",
+  "session_id": "uuid",
+  "started_at": "timestamp",
+  "time_limit": "integer",
+  "questions": ["array"]
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Competition not active, already started, not registered
+- `403 Forbidden`: Competition time window expired
+
+#### 3.9.10 Get Competition Results
+```
+GET /api/v1/competitions/{competition_id}/results
+```
+
+**Response:**
+```json
+{
+  "competition_id": "uuid",
+  "name": "string",
+  "status": "ended",
+  "ended_at": "timestamp",
+  "total_participants": "integer",
+  "winners": [
+    {
+      "rank": "integer",
+      "student_id": "uuid",
+      "student_name": "string",
+      "score": "float",
+      "max_score": "float",
+      "accuracy": "float"
+    }
+  ],
+  "statistics": {
+    "average_score": "float",
+    "highest_score": "float",
+    "participation_rate": "float",
+    "completion_rate": "float"
+  },
+  "leaderboard": ["array"]
+}
+```
+
+#### 3.9.11 Get Student Competition Result
+```
+GET /api/v1/competitions/{competition_id}/results/{student_id}
+```
+
+**Response:**
+```json
+{
+  "competition_id": "uuid",
+  "student_id": "uuid",
+  "rank": "integer",
+  "score": "float",
+  "max_score": "float",
+  "accuracy": "float",
+  "questions_answered": "integer",
+  "completion_time": "integer",
+  "completed_at": "timestamp",
+  "session_details": "object"
+}
+```
+
+#### 3.9.12 Get Competition Statistics
+```
+GET /api/v1/admin/competitions/{competition_id}/statistics
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Response:**
+```json
+{
+  "competition_id": "uuid",
+  "name": "string",
+  "status": "string",
+  "registrations": {
+    "total": "integer",
+    "confirmed": "integer",
+    "cancelled": "integer"
+  },
+  "participation": {
+    "started": "integer",
+    "completed": "integer",
+    "completion_rate": "float"
+  },
+  "performance": {
+    "average_score": "float",
+    "highest_score": "float",
+    "lowest_score": "float",
+    "median_score": "float"
+  },
+  "timing": {
+    "average_completion_time": "integer",
+    "fastest_completion": "integer",
+    "slowest_completion": "integer"
+  }
+}
+```
+
+### 3.10 Tutor Management Endpoints
 
 #### 3.9.1 List Tutors
 ```
@@ -1418,7 +1905,7 @@ GET /api/v1/tutors/{tutor_id}/students/{student_id}/progress
 }
 ```
 
-### 3.10 Messaging Endpoints
+### 3.11 Messaging Endpoints
 
 #### 3.10.1 Send Message
 ```
@@ -1563,7 +2050,7 @@ DELETE /api/v1/messages/{message_id}
 }
 ```
 
-### 3.11 Tenant Management Endpoints
+### 3.12 Tenant Management Endpoints
 
 #### 3.11.1 List Tenants
 ```
@@ -1858,7 +2345,7 @@ GET /api/v1/tenant/resolve?domain=example.com
 }
 ```
 
-### 3.12 System Administrator Endpoints
+### 3.13 System Administrator Endpoints
 
 #### 3.12.1 Create System Admin Account
 ```
@@ -2004,7 +2491,7 @@ POST /api/v1/system/tenants/{tenant_id}/admins
 }
 ```
 
-### 3.13 Tenant Administrator Endpoints
+### 3.14 Tenant Administrator Endpoints
 
 #### 3.13.1 List Accounts (Within Tenant)
 ```
@@ -2242,7 +2729,7 @@ GET /api/v1/tenant/statistics
 }
 ```
 
-### 3.14 System-Wide Administrator Endpoints (Legacy - Updated)
+### 3.15 System-Wide Administrator Endpoints (Legacy - Updated)
 
 #### 3.14.1 Enable/Disable Subject (System-Wide)
 ```
@@ -2580,7 +3067,92 @@ GET /api/v1/system/audit-logs
 }
 ```
 
-### 4.11 Tutor Account
+### 4.11 Competition
+```json
+{
+  "competition_id": "uuid",
+  "tenant_id": "uuid",  // Required: tenant context (null for system-wide)
+  "name": "string",
+  "description": "string",
+  "subject_id": "uuid",  // Reference to subject
+  "subject_code": "string",  // Denormalized for quick access
+  "status": "upcoming|active|ended|cancelled",
+  "start_date": "timestamp",
+  "end_date": "timestamp",
+  "registration_start": "timestamp",
+  "registration_end": "timestamp",
+  "rules": {
+    "time_limit": "integer",  // Total time limit in seconds
+    "num_questions": "integer",
+    "difficulty": "beginner|intermediate|advanced",
+    "allowed_question_types": ["array"],
+    "max_attempts": "integer",  // Typically 1 for competitions
+    "scoring_rules": {
+      "points_per_question": "float",
+      "bonus_points": "object",
+      "penalties": "object"
+    },
+    "hints_allowed": "boolean",
+    "narratives_allowed": "boolean"
+  },
+  "eligibility": {
+    "grade_levels": ["array"],  // [6, 7, 8, ...] or null for all
+    "tenant_restrictions": ["array"],  // Specific tenant IDs or null for all
+    "minimum_requirements": {
+      "min_accuracy": "float",
+      "min_questions_answered": "integer"
+    }
+  },
+  "visibility": "public|private|tenant_specific",
+  "max_participants": "integer",  // Null for unlimited
+  "participant_count": "integer",
+  "created_at": "timestamp",
+  "updated_at": "timestamp",
+  "created_by": "uuid",  // Admin user ID
+  "cancelled_at": "timestamp",  // If cancelled
+  "cancelled_by": "uuid",  // Admin user ID
+  "cancellation_reason": "string"
+}
+```
+
+### 4.11a Competition Registration
+```json
+{
+  "registration_id": "uuid",
+  "competition_id": "uuid",
+  "tenant_id": "uuid",  // Required: tenant context
+  "student_id": "uuid",  // Must belong to tenant_id
+  "status": "registered|confirmed|cancelled",
+  "registered_at": "timestamp",
+  "confirmed_at": "timestamp",
+  "cancelled_at": "timestamp",
+  "cancelled_by": "uuid",  // Student ID if self-cancelled, Admin ID if admin-cancelled
+  "waitlist_position": "integer",  // If max participants reached
+  "notes": "string"  // Optional
+}
+```
+
+### 4.11b Competition Session
+```json
+{
+  "competition_session_id": "uuid",
+  "competition_id": "uuid",
+  "tenant_id": "uuid",  // Required: tenant context
+  "student_id": "uuid",  // Must belong to tenant_id
+  "session_id": "uuid",  // Reference to quiz session
+  "started_at": "timestamp",
+  "completed_at": "timestamp",
+  "time_limit": "integer",
+  "score": "float",
+  "max_score": "float",
+  "accuracy": "float",
+  "completion_time": "integer",
+  "questions_answered": "integer",
+  "status": "in_progress|completed|expired|abandoned"
+}
+```
+
+### 4.12 Tutor Account
 ```json
 {
   "tutor_id": "uuid",
@@ -2606,7 +3178,7 @@ GET /api/v1/system/audit-logs
 }
 ```
 
-### 4.12 Administrator Account
+### 4.13 Administrator Account
 ```json
 {
   "admin_id": "uuid",
@@ -2628,7 +3200,7 @@ GET /api/v1/system/audit-logs
 }
 ```
 
-### 4.13 Student-Tutor Assignment
+### 4.14 Student-Tutor Assignment
 ```json
 {
   "assignment_id": "uuid",
@@ -2644,7 +3216,7 @@ GET /api/v1/system/audit-logs
 }
 ```
 
-### 4.14 Message
+### 4.15 Message
 ```json
 {
   "message_id": "uuid",
@@ -2667,7 +3239,7 @@ GET /api/v1/system/audit-logs
 }
 ```
 
-### 4.15 Audit Log
+### 4.16 Audit Log
 ```json
 {
   "log_id": "uuid",
@@ -3031,7 +3603,7 @@ GET /api/v1/system/audit-logs
 ---
 
 ## Document Version
-- **Version**: 1.5
+- **Version**: 1.6
 - **Date**: 2024
 - **Author**: Requirements Team
 - **Status**: Draft
@@ -3041,4 +3613,5 @@ GET /api/v1/system/audit-logs
   - v1.3: Added Tutor Management requirements (Section 2.9), Messaging System requirements (Section 2.10), Administrator Management requirements (Section 2.11), Role-Based Access Control requirements (Section 2.12), Tutor Management endpoints (Section 3.9), Messaging endpoints (Section 3.10), Administrator endpoints (Section 3.11), Tutor Account data model (Section 4.10), Administrator Account data model (Section 4.11), Student-Tutor Assignment model (Section 4.12), Message data model (Section 4.13), Audit Log model (Section 4.14), updated Student Account model to include role and assigned_tutor_id, updated authentication to support multiple roles, updated Security, Integration, and Testing sections for role-based access and messaging.
   - v1.4: Added Tenant Management requirements (Section 2.12), updated Role-Based Access Control (Section 2.13) to include tenant_admin role, added Tenant Management endpoints (Section 3.11), separated System Administrator endpoints (Section 3.12) and Tenant Administrator endpoints (Section 3.13), added Tenant data model (Section 4.1), updated all data models to include tenant_id for multi-tenancy support, updated authentication response to include tenant_id, added tenant isolation security requirements (NFR-4.15), and renumbered subsequent data model sections.
   - v1.5: Added domain-based tenant identification (Section 2.12.3), updated Tenant Management to include domain requirements (Section 2.12.2), added domain management endpoints (Sections 3.11.7-3.11.10), added domain resolution endpoint, updated Tenant data model to include domains (Section 4.1), added Tenant Domain data model (Section 4.1a), updated login endpoint to accept domain parameter, added domain-based tenant resolution security requirements (NFR-4.16), and added domain resolution architecture constraints (Section 7.5).
+  - v1.6: Added Competition Management requirements (Section 2.9), Competition Endpoints (Section 3.9), Competition data models (Sections 4.11, 4.11a, 4.11b), renumbered subsequent sections (Tutor Management to 2.10, Messaging to 2.11, Administrator to 2.12, Tenant to 2.13, RBAC to 2.14), and renumbered API endpoint sections accordingly.
 

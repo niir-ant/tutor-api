@@ -1,0 +1,4028 @@
+openapi: 3.0.3
+info:
+  title: Quiz API
+  description: |
+    API for AI-generated quiz questions for educational institutions.
+    Supports multi-tenant architecture where each tenant represents an educational institution.
+    Features include question generation, answer validation, scoring, hints, educational narratives,
+    tutor management, messaging, and comprehensive progress tracking.
+  version: 1.0.0
+  contact:
+    name: SJCPP Team
+    email: support@atduty.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.sjcpp.com/api/v1
+    description: Production server
+  - url: https://staging-api.sjcpp.com/api/v1
+    description: Staging server
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Questions
+    description: Question generation and retrieval
+  - name: Answers
+    description: Answer submission and validation
+  - name: Hints
+    description: Hint generation for questions
+  - name: Sessions
+    description: Quiz session management
+  - name: Progress
+    description: Student progress tracking
+  - name: Students
+    description: Student account management
+  - name: Tutors
+    description: Tutor management
+  - name: Messages
+    description: Student-tutor messaging
+  - name: Subjects
+    description: Subject/course management
+  - name: Competitions
+    description: Competition management and participation
+  - name: Tenants
+    description: Tenant management and domain resolution
+  - name: System Admin
+    description: System-wide administration
+  - name: Tenant Admin
+    description: Tenant-level administration
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and receive access token. Domain parameter is required to identify tenant.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              body:
+                value:
+                  username: student1
+                  password: password123
+                  domain: example.com
+              query:
+                description: Domain can also be passed as query parameter
+                value:
+                  username: student1
+                  password: password123
+      parameters:
+        - name: domain
+          in: query
+          description: Domain to identify tenant (alternative to body parameter)
+          required: false
+          schema:
+            type: string
+            example: example.com
+        - name: X-Tenant-Domain
+          in: header
+          description: Domain to identify tenant (alternative to body/query parameter)
+          required: false
+          schema:
+            type: string
+            example: example.com
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Logout and invalidate current session token
+      responses:
+        '200':
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Successfully logged out
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get a new access token using refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+
+  /auth/change-password:
+    post:
+      tags:
+        - Authentication
+      summary: Change password (first login)
+      description: Change password on first login or update existing password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - new_password
+                - confirm_password
+              properties:
+                current_password:
+                  type: string
+                  description: Required for existing passwords, optional for first-time
+                new_password:
+                  type: string
+                confirm_password:
+                  type: string
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  requires_password_change:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/update-password:
+    post:
+      tags:
+        - Authentication
+      summary: Update password
+      description: Update existing password (requires current password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - current_password
+                - new_password
+                - confirm_password
+              properties:
+                current_password:
+                  type: string
+                new_password:
+                  type: string
+                confirm_password:
+                  type: string
+      responses:
+        '200':
+          description: Password updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /auth/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset
+      description: Request one-time passcode (OTP) for password reset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: OTP sent if email exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  otp_expires_in:
+                    type: integer
+
+  /auth/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password with OTP
+      description: Reset password using one-time passcode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+                - new_password
+                - confirm_password
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+                new_password:
+                  type: string
+                confirm_password:
+                  type: string
+      responses:
+        '200':
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+
+  /auth/resend-otp:
+    post:
+      tags:
+        - Authentication
+      summary: Resend OTP
+      description: Resend one-time passcode for password reset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: OTP resent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  otp_expires_in:
+                    type: integer
+
+  /questions/generate:
+    post:
+      tags:
+        - Questions
+      summary: Generate question
+      description: Generate a new quiz question using AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateQuestionRequest'
+      responses:
+        '200':
+          description: Question generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionResponse'
+
+  /questions/{question_id}:
+    get:
+      tags:
+        - Questions
+      summary: Get question
+      description: Retrieve question details by ID
+      parameters:
+        - name: question_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Question retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+
+  /questions/{question_id}/narrative:
+    get:
+      tags:
+        - Questions
+      summary: Get question narrative
+      description: Get educational narrative/explanation for a question
+      parameters:
+        - name: question_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Narrative retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionNarrative'
+
+  /questions/{question_id}/answer:
+    post:
+      tags:
+        - Answers
+      summary: Submit answer
+      description: Submit answer for a question
+      parameters:
+        - name: question_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitAnswerRequest'
+      responses:
+        '200':
+          description: Answer submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnswerResponse'
+
+  /questions/{question_id}/validate:
+    post:
+      tags:
+        - Answers
+      summary: Validate answer (pre-submission)
+      description: Validate answer without recording attempt (practice mode)
+      parameters:
+        - name: question_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitAnswerRequest'
+      responses:
+        '200':
+          description: Answer validated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnswerResponse'
+
+  /questions/{question_id}/hint:
+    post:
+      tags:
+        - Hints
+      summary: Get hint
+      description: Get a hint for a question
+      parameters:
+        - name: question_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HintRequest'
+      responses:
+        '200':
+          description: Hint retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HintResponse'
+
+  /sessions:
+    post:
+      tags:
+        - Sessions
+      summary: Create quiz session
+      description: Create a new quiz session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '200':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+
+  /sessions/{session_id}:
+    get:
+      tags:
+        - Sessions
+      summary: Get session status
+      description: Get current status of a quiz session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatus'
+
+  /sessions/{session_id}/results:
+    get:
+      tags:
+        - Sessions
+      summary: Get session results
+      description: Get final results of a completed quiz session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session results retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResults'
+
+  /students/{student_id}/progress:
+    get:
+      tags:
+        - Progress
+      summary: Get student progress
+      description: Get progress statistics for a student
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject
+          in: query
+          schema:
+            type: string
+        - name: grade_level
+          in: query
+          schema:
+            type: integer
+        - name: time_range
+          in: query
+          schema:
+            type: string
+            enum: [last_week, last_month, all_time]
+      responses:
+        '200':
+          description: Progress retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProgress'
+
+  /students/{student_id}/analytics:
+    get:
+      tags:
+        - Progress
+      summary: Get performance analytics
+      description: Get detailed performance analytics for a student
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceAnalytics'
+
+  /students/{student_id}:
+    get:
+      tags:
+        - Students
+      summary: Get student account
+      description: Get student account details
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Student account retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentAccount'
+
+  /subjects:
+    get:
+      tags:
+        - Subjects
+      summary: List subjects
+      description: Get list of available subjects
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, all]
+        - name: grade_level
+          in: query
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subjects retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subjects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Subject'
+                  total:
+                    type: integer
+
+  /subjects/{subject_id}:
+    get:
+      tags:
+        - Subjects
+      summary: Get subject
+      description: Get subject details by ID
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Subject retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subject'
+
+  /competitions:
+    get:
+      tags:
+        - Competitions
+      summary: List competitions
+      description: Get list of competitions
+      parameters:
+        - name: subject_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [upcoming, active, ended, cancelled, all]
+        - name: tenant_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Competitions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  competitions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CompetitionSummary'
+                  total:
+                    type: integer
+
+  /competitions/{competition_id}:
+    get:
+      tags:
+        - Competitions
+      summary: Get competition
+      description: Get competition details by ID
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Competition retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Competition'
+
+  /competitions/{competition_id}/register:
+    post:
+      tags:
+        - Competitions
+      summary: Register for competition
+      description: Register for a competition
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitionRegistration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    delete:
+      tags:
+        - Competitions
+      summary: Cancel registration
+      description: Cancel competition registration
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Registration cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registration_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: cancelled
+                  cancelled_at:
+                    type: string
+                    format: date-time
+
+  /competitions/{competition_id}/leaderboard:
+    get:
+      tags:
+        - Competitions
+      summary: Get competition leaderboard
+      description: Get leaderboard for a competition
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [real_time, final]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: grade_level
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Leaderboard retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitionLeaderboard'
+
+  /competitions/{competition_id}/start:
+    post:
+      tags:
+        - Competitions
+      summary: Start competition session
+      description: Start a competition session
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Competition session started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitionSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /competitions/{competition_id}/results:
+    get:
+      tags:
+        - Competitions
+      summary: Get competition results
+      description: Get final results for a competition
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Results retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitionResults'
+
+  /competitions/{competition_id}/results/{student_id}:
+    get:
+      tags:
+        - Competitions
+      summary: Get student competition result
+      description: Get individual student result for a competition
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Student result retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentCompetitionResult'
+
+  /admin/competitions:
+    post:
+      tags:
+        - Competitions
+      summary: Create competition
+      description: Create a new competition (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCompetitionRequest'
+      responses:
+        '200':
+          description: Competition created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Competition'
+
+  /admin/competitions/{competition_id}:
+    put:
+      tags:
+        - Competitions
+      summary: Update competition
+      description: Update competition configuration (admin only, before start)
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCompetitionRequest'
+      responses:
+        '200':
+          description: Competition updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Competition'
+
+  /admin/competitions/{competition_id}/cancel:
+    post:
+      tags:
+        - Competitions
+      summary: Cancel competition
+      description: Cancel a competition (admin only)
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Competition cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  competition_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: cancelled
+                  cancelled_at:
+                    type: string
+                    format: date-time
+                  reason:
+                    type: string
+
+  /admin/competitions/{competition_id}/statistics:
+    get:
+      tags:
+        - Competitions
+      summary: Get competition statistics
+      description: Get statistics for a competition (admin only)
+      parameters:
+        - name: competition_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitionStatistics'
+
+  /tutors:
+    get:
+      tags:
+        - Tutors
+      summary: List tutors
+      description: Get list of tutors (admin only)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, all]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tutors retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tutors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TutorSummary'
+                  total:
+                    type: integer
+
+  /tutors/{tutor_id}:
+    get:
+      tags:
+        - Tutors
+      summary: Get tutor
+      description: Get tutor details by ID
+      parameters:
+        - name: tutor_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tutor retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tutor'
+
+  /tutors/{tutor_id}/students:
+    get:
+      tags:
+        - Tutors
+      summary: Get tutor's students
+      description: Get list of students assigned to a tutor
+      parameters:
+        - name: tutor_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Students retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorStudentsResponse'
+
+  /tutors/{tutor_id}/students/{student_id}/progress:
+    get:
+      tags:
+        - Tutors
+      summary: Get student progress (tutor view)
+      description: Get student progress from tutor's perspective
+      parameters:
+        - name: tutor_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Progress retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorStudentProgress'
+
+  /messages:
+    post:
+      tags:
+        - Messages
+      summary: Send message
+      description: Send a message between student and tutor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    get:
+      tags:
+        - Messages
+      summary: Get messages
+      description: Get messages/conversations
+      parameters:
+        - name: conversation_with
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: unread_only
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagesResponse'
+
+  /messages/conversations/{user_id}:
+    get:
+      tags:
+        - Messages
+      summary: Get conversation thread
+      description: Get conversation thread with a specific user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Conversation retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+
+  /messages/{message_id}/read:
+    put:
+      tags:
+        - Messages
+      summary: Mark message as read
+      description: Mark a message as read
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Message marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: read
+                  read_at:
+                    type: string
+                    format: date-time
+
+  /messages/conversations/{user_id}/read:
+    put:
+      tags:
+        - Messages
+      summary: Mark conversation as read
+      description: Mark all messages in a conversation as read
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Conversation marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_with:
+                    type: string
+                    format: uuid
+                  messages_marked_read:
+                    type: integer
+
+  /messages/{message_id}:
+    delete:
+      tags:
+        - Messages
+      summary: Delete message
+      description: Delete a message (soft delete)
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Message deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: deleted
+                  deleted_at:
+                    type: string
+                    format: date-time
+
+  /tenant/resolve:
+    get:
+      tags:
+        - Tenants
+      summary: Resolve tenant from domain
+      description: Resolve tenant information from domain name
+      security: []
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+            example: example.com
+      responses:
+        '200':
+          description: Tenant resolved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResolution'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /system/tenants:
+    get:
+      tags:
+        - System Admin
+      summary: List tenants
+      description: Get list of all tenants (system admin only)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, suspended, all]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenants retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenants:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TenantSummary'
+                  total:
+                    type: integer
+    post:
+      tags:
+        - System Admin
+      summary: Create tenant
+      description: Create a new tenant (system admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+      responses:
+        '200':
+          description: Tenant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+
+  /system/tenants/{tenant_id}:
+    get:
+      tags:
+        - System Admin
+      summary: Get tenant
+      description: Get tenant details by ID
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tenant retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+    put:
+      tags:
+        - System Admin
+      summary: Update tenant
+      description: Update tenant information
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+      responses:
+        '200':
+          description: Tenant updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+
+  /system/tenants/{tenant_id}/status:
+    put:
+      tags:
+        - System Admin
+      summary: Enable/disable tenant
+      description: Enable or disable a tenant
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive, suspended]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Tenant status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                  updated_at:
+                    type: string
+                    format: date-time
+                  updated_by:
+                    type: string
+                    format: uuid
+
+  /system/tenants/{tenant_id}/statistics:
+    get:
+      tags:
+        - System Admin
+      summary: Get tenant statistics
+      description: Get statistics for a tenant
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantStatistics'
+
+  /system/tenants/{tenant_id}/domains:
+    post:
+      tags:
+        - System Admin
+      summary: Add domain to tenant
+      description: Add a new domain to a tenant
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - domain
+              properties:
+                domain:
+                  type: string
+                  example: newdomain.com
+                is_primary:
+                  type: boolean
+      responses:
+        '200':
+          description: Domain added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDomain'
+
+  /system/tenants/{tenant_id}/domains/{domain_id}:
+    delete:
+      tags:
+        - System Admin
+      summary: Remove domain from tenant
+      description: Remove a domain from a tenant
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: domain_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Domain removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domain_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: removed
+                  removed_at:
+                    type: string
+                    format: date-time
+
+  /system/tenants/{tenant_id}/domains/{domain_id}/primary:
+    put:
+      tags:
+        - System Admin
+      summary: Set primary domain
+      description: Set a domain as the primary domain for a tenant
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: domain_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Primary domain set successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domain_id:
+                    type: string
+                    format: uuid
+                  is_primary:
+                    type: boolean
+                    example: true
+                  updated_at:
+                    type: string
+                    format: date-time
+
+  /system/tenants/{tenant_id}/admins:
+    post:
+      tags:
+        - System Admin
+      summary: Create tenant admin account
+      description: Create a tenant admin account for a specific tenant
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminRequest'
+      responses:
+        '200':
+          description: Tenant admin created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccount'
+
+  /system/accounts:
+    get:
+      tags:
+        - System Admin
+      summary: List all accounts
+      description: Get list of all accounts across all tenants (system admin only)
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [student, tutor, admin, all]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, all]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountSummary'
+                  total:
+                    type: integer
+
+  /system/accounts/{account_id}:
+    get:
+      tags:
+        - System Admin
+      summary: Get account details
+      description: Get account details (system-wide)
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Account retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetails'
+
+  /system/accounts/{account_id}/status:
+    put:
+      tags:
+        - System Admin
+      summary: Enable/disable account
+      description: Enable or disable an account (system-wide)
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Account status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                  updated_at:
+                    type: string
+                    format: date-time
+                  updated_by:
+                    type: string
+                    format: uuid
+
+  /system/subjects/{subject_id}/status:
+    put:
+      tags:
+        - System Admin
+      summary: Enable/disable subject
+      description: Enable or disable a subject (system-wide)
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Subject status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subject_id:
+                    type: string
+                    format: uuid
+                  subject_code:
+                    type: string
+                  status:
+                    type: string
+                  updated_at:
+                    type: string
+                    format: date-time
+                  updated_by:
+                    type: string
+                    format: uuid
+
+  /system/statistics:
+    get:
+      tags:
+        - System Admin
+      summary: Get system-wide statistics
+      description: Get system-wide statistics (system admin only)
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatistics'
+
+  /system/audit-logs:
+    get:
+      tags:
+        - System Admin
+      summary: Get audit logs
+      description: Get system-wide audit logs
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Audit logs retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  total:
+                    type: integer
+
+  /admin/subjects:
+    post:
+      tags:
+        - Subjects
+      summary: Create subject
+      description: Create a new subject (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubjectRequest'
+      responses:
+        '200':
+          description: Subject created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subject'
+
+  /admin/subjects/{subject_id}:
+    put:
+      tags:
+        - Subjects
+      summary: Update subject
+      description: Update subject configuration
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSubjectRequest'
+      responses:
+        '200':
+          description: Subject updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subject'
+
+  /admin/subjects/{subject_id}/deactivate:
+    post:
+      tags:
+        - Subjects
+      summary: Deactivate subject
+      description: Deactivate a subject
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Subject deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subject_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: inactive
+                  message:
+                    type: string
+
+  /admin/subjects/{subject_id}/statistics:
+    get:
+      tags:
+        - Subjects
+      summary: Get subject statistics
+      description: Get statistics for a subject
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectStatistics'
+
+  /admin/students:
+    post:
+      tags:
+        - Students
+      summary: Create preset student account
+      description: Create a preset student account (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentRequest'
+      responses:
+        '200':
+          description: Student account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentAccountResponse'
+
+  /admin/tutors:
+    post:
+      tags:
+        - Tutors
+      summary: Create tutor account
+      description: Create a tutor account (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTutorRequest'
+      responses:
+        '200':
+          description: Tutor account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorAccountResponse'
+
+  /admin/assignments:
+    post:
+      tags:
+        - Tutors
+      summary: Assign student to tutor
+      description: Assign a student to a tutor (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - student_id
+                - tutor_id
+              properties:
+                student_id:
+                  type: string
+                  format: uuid
+                tutor_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Assignment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentResponse'
+
+  /admin/assignments/bulk:
+    post:
+      tags:
+        - Tutors
+      summary: Bulk assign students to tutor
+      description: Assign multiple students to a tutor (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tutor_id
+                - student_ids
+              properties:
+                tutor_id:
+                  type: string
+                  format: uuid
+                student_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Bulk assignment completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tutor_id:
+                    type: string
+                    format: uuid
+                  assigned_count:
+                    type: integer
+                  failed_assignments:
+                    type: array
+                    items:
+                      type: object
+                  assignments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AssignmentResponse'
+
+  /tenant/accounts:
+    get:
+      tags:
+        - Tenant Admin
+      summary: List accounts (within tenant)
+      description: Get list of accounts within the tenant
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [student, tutor, all]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, all]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountSummary'
+                  total:
+                    type: integer
+
+  /tenant/accounts/{account_id}:
+    get:
+      tags:
+        - Tenant Admin
+      summary: Get account details (within tenant)
+      description: Get account details within the tenant
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Account retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetails'
+
+  /tenant/accounts/{account_id}/status:
+    put:
+      tags:
+        - Tenant Admin
+      summary: Enable/disable account (within tenant)
+      description: Enable or disable an account within the tenant
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Account status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                  updated_at:
+                    type: string
+                    format: date-time
+                  updated_by:
+                    type: string
+                    format: uuid
+
+  /tenant/students:
+    post:
+      tags:
+        - Tenant Admin
+      summary: Create student account (within tenant)
+      description: Create a student account within the tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentRequest'
+      responses:
+        '200':
+          description: Student account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentAccountResponse'
+
+  /tenant/tutors:
+    post:
+      tags:
+        - Tenant Admin
+      summary: Create tutor account (within tenant)
+      description: Create a tutor account within the tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTutorRequest'
+      responses:
+        '200':
+          description: Tutor account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorAccountResponse'
+
+  /tenant/assignments:
+    post:
+      tags:
+        - Tenant Admin
+      summary: Assign student to tutor (within tenant)
+      description: Assign a student to a tutor within the tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - student_id
+                - tutor_id
+              properties:
+                student_id:
+                  type: string
+                  format: uuid
+                tutor_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Assignment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentResponse'
+
+  /tenant/assignments/{assignment_id}:
+    delete:
+      tags:
+        - Tenant Admin
+      summary: Remove student-tutor assignment
+      description: Remove a student-tutor assignment within the tenant
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Assignment removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignment_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: removed
+                  removed_at:
+                    type: string
+                    format: date-time
+
+  /tenant/assignments/bulk:
+    post:
+      tags:
+        - Tenant Admin
+      summary: Bulk assign students to tutor (within tenant)
+      description: Assign multiple students to a tutor within the tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tutor_id
+                - student_ids
+              properties:
+                tutor_id:
+                  type: string
+                  format: uuid
+                student_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Bulk assignment completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tutor_id:
+                    type: string
+                    format: uuid
+                  assigned_count:
+                    type: integer
+                  failed_assignments:
+                    type: array
+                    items:
+                      type: object
+                  assignments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AssignmentResponse'
+
+  /tenant/statistics:
+    get:
+      tags:
+        - Tenant Admin
+      summary: Get tenant statistics
+      description: Get statistics for the tenant
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantStatistics'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login endpoint
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+        - domain
+      properties:
+        username:
+          type: string
+          description: Username or email
+        password:
+          type: string
+          format: password
+        domain:
+          type: string
+          description: Domain to identify tenant
+          example: example.com
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token expiration in seconds
+        refresh_token:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserInfo'
+
+    UserInfo:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [student, tutor, tenant_admin, system_admin]
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null for system_admin
+        grade_level:
+          type: integer
+          description: For students
+        requires_password_change:
+          type: boolean
+        account_status:
+          type: string
+          enum: [pending_activation, active, inactive, locked]
+
+    GenerateQuestionRequest:
+      type: object
+      required:
+        - subject_id
+        - difficulty
+      properties:
+        subject_id:
+          type: string
+          format: uuid
+          description: Or use subject_code
+        subject_code:
+          type: string
+          description: Alternative to subject_id
+        grade_level:
+          type: integer
+          minimum: 6
+          maximum: 12
+          description: Required if subject supports grade levels
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        topic:
+          type: string
+        question_type:
+          type: string
+          enum: [multiple_choice, short_answer, code_completion, code_writing, fill_blank, true_false]
+        session_id:
+          type: string
+          format: uuid
+
+    QuestionResponse:
+      type: object
+      properties:
+        question_id:
+          type: string
+          format: uuid
+        question_text:
+          type: string
+        question_type:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+          description: For multiple choice
+        metadata:
+          type: object
+          properties:
+            difficulty:
+              type: string
+            estimated_time:
+              type: integer
+            learning_objectives:
+              type: array
+              items:
+                type: string
+            topic:
+              type: string
+        session_id:
+          type: string
+          format: uuid
+
+    Question:
+      type: object
+      properties:
+        question_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        grade_level:
+          type: integer
+          nullable: true
+        difficulty:
+          type: string
+        question_type:
+          type: string
+        question_text:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        correct_answer:
+          oneOf:
+            - type: string
+            - type: object
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    QuestionNarrative:
+      type: object
+      properties:
+        question_id:
+          type: string
+          format: uuid
+        narrative:
+          type: string
+        explanation:
+          type: object
+          properties:
+            concept:
+              type: string
+            steps:
+              type: array
+              items:
+                type: string
+            why_correct:
+              type: string
+            common_mistakes:
+              type: array
+              items:
+                type: string
+            related_concepts:
+              type: array
+              items:
+                type: string
+
+    SubmitAnswerRequest:
+      type: object
+      required:
+        - answer
+        - student_id
+        - session_id
+      properties:
+        answer:
+          oneOf:
+            - type: string
+            - type: object
+          description: Text, code, or selected option(s)
+        student_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        time_spent:
+          type: integer
+          description: Time spent in seconds
+        hints_used:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of hint IDs used
+
+    AnswerResponse:
+      type: object
+      properties:
+        question_id:
+          type: string
+          format: uuid
+        correct:
+          type: boolean
+        score:
+          type: number
+          format: float
+        max_score:
+          type: number
+          format: float
+        feedback:
+          type: string
+        correct_answer:
+          type: string
+          description: Revealed after submission
+        explanation:
+          type: string
+        areas_correct:
+          type: array
+          items:
+            type: string
+        areas_incorrect:
+          type: array
+          items:
+            type: string
+
+    HintRequest:
+      type: object
+      required:
+        - student_id
+      properties:
+        hint_level:
+          type: integer
+          minimum: 1
+          maximum: 4
+          description: Optional, defaults to next available
+        student_id:
+          type: string
+          format: uuid
+        previous_attempts:
+          type: array
+          items:
+            type: string
+        hints_already_shown:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    HintResponse:
+      type: object
+      properties:
+        hint_id:
+          type: string
+          format: uuid
+        hint_level:
+          type: integer
+        hint_text:
+          type: string
+        remaining_hints:
+          type: integer
+
+    CreateSessionRequest:
+      type: object
+      required:
+        - student_id
+        - subject_id
+        - difficulty
+        - num_questions
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        grade_level:
+          type: integer
+          description: Required if subject supports grade levels
+        difficulty:
+          type: string
+        num_questions:
+          type: integer
+        topics:
+          type: array
+          items:
+            type: string
+        time_limit:
+          type: integer
+          description: Time limit in seconds
+
+    SessionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        questions:
+          type: array
+          items:
+            type: string
+            format: uuid
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    SessionStatus:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [in_progress, completed, expired]
+        current_question:
+          type: integer
+        total_questions:
+          type: integer
+        score:
+          type: number
+          format: float
+        max_score:
+          type: number
+          format: float
+        time_elapsed:
+          type: integer
+        questions_answered:
+          type: integer
+
+    SessionResults:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        score:
+          type: number
+          format: float
+        max_score:
+          type: number
+          format: float
+        questions:
+          type: array
+          items:
+            type: object
+        completed_at:
+          type: string
+          format: date-time
+
+    StudentProgress:
+      type: object
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        overall_stats:
+          type: object
+          properties:
+            total_questions:
+              type: integer
+            correct_answers:
+              type: integer
+            accuracy:
+              type: number
+              format: float
+            average_score:
+              type: number
+              format: float
+        by_subject:
+          type: object
+        by_topic:
+          type: object
+        trends:
+          type: object
+          properties:
+            improvement_rate:
+              type: number
+              format: float
+            weak_areas:
+              type: array
+              items:
+                type: string
+            strong_areas:
+              type: array
+              items:
+                type: string
+
+    PerformanceAnalytics:
+      type: object
+      description: Detailed performance analytics for a student
+
+    StudentAccount:
+      type: object
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        grade_level:
+          type: integer
+        account_status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        requires_password_change:
+          type: boolean
+
+    StudentAccountResponse:
+      type: object
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        account_status:
+          type: string
+          example: pending_activation
+        temporary_password:
+          type: string
+          description: Only if send_activation_email is false
+        created_at:
+          type: string
+          format: date-time
+
+    CreateStudentRequest:
+      type: object
+      required:
+        - username
+        - email
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        grade_level:
+          type: integer
+        send_activation_email:
+          type: boolean
+
+    Subject:
+      type: object
+      properties:
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [academic, programming, language, science, other]
+        grade_levels:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive, archived]
+        supported_question_types:
+          type: array
+          items:
+            type: string
+        answer_validation_method:
+          type: string
+          enum: [ai_semantic, code_execution, exact_match, ai_structured]
+        settings:
+          type: object
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateSubjectRequest:
+      type: object
+      required:
+        - subject_code
+        - name
+        - type
+        - supported_question_types
+        - answer_validation_method
+      properties:
+        subject_code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [academic, programming, language, science, other]
+        grade_levels:
+          type: array
+          items:
+            type: integer
+        supported_question_types:
+          type: array
+          items:
+            type: string
+        answer_validation_method:
+          type: string
+          enum: [ai_semantic, code_execution, exact_match, ai_structured]
+        settings:
+          type: object
+        metadata:
+          type: object
+
+    UpdateSubjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        grade_levels:
+          type: array
+          items:
+            type: integer
+        status:
+          type: string
+          enum: [active, inactive, archived]
+        supported_question_types:
+          type: array
+          items:
+            type: string
+        settings:
+          type: object
+        metadata:
+          type: object
+
+    SubjectStatistics:
+      type: object
+      properties:
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        total_questions:
+          type: integer
+        total_sessions:
+          type: integer
+        total_students:
+          type: integer
+        average_score:
+          type: number
+          format: float
+        questions_by_difficulty:
+          type: object
+          properties:
+            beginner:
+              type: integer
+            intermediate:
+              type: integer
+            advanced:
+              type: integer
+
+    TutorSummary:
+      type: object
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        student_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    Tutor:
+      type: object
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        profile:
+          type: object
+          properties:
+            bio:
+              type: string
+            specializations:
+              type: array
+              items:
+                type: string
+            contact_info:
+              type: object
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateTutorRequest:
+      type: object
+      required:
+        - username
+        - email
+        - name
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        send_activation_email:
+          type: boolean
+
+    TutorAccountResponse:
+      type: object
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        status:
+          type: string
+          example: pending_activation
+        temporary_password:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TutorStudentsResponse:
+      type: object
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        students:
+          type: array
+          items:
+            type: object
+            properties:
+              student_id:
+                type: string
+                format: uuid
+              username:
+                type: string
+              name:
+                type: string
+              email:
+                type: string
+              grade_level:
+                type: integer
+              assigned_at:
+                type: string
+                format: date-time
+              progress_summary:
+                type: object
+        total:
+          type: integer
+
+    TutorStudentProgress:
+      type: object
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        overall_stats:
+          type: object
+        by_subject:
+          type: object
+        recent_sessions:
+          type: array
+        weak_areas:
+          type: array
+          items:
+            type: string
+        strong_areas:
+          type: array
+          items:
+            type: string
+
+    SendMessageRequest:
+      type: object
+      required:
+        - recipient_id
+        - content
+      properties:
+        recipient_id:
+          type: string
+          format: uuid
+          description: Tutor ID if sender is student, Student ID if sender is tutor
+        content:
+          type: string
+        send_email_copy:
+          type: boolean
+          default: false
+        subject_reference:
+          type: string
+          format: uuid
+        question_reference:
+          type: string
+          format: uuid
+
+    MessageResponse:
+      type: object
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        recipient_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        status:
+          type: string
+          example: sent
+        email_sent:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    MessagesResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              message_id:
+                type: string
+                format: uuid
+              sender_id:
+                type: string
+                format: uuid
+              sender_name:
+                type: string
+              sender_role:
+                type: string
+              recipient_id:
+                type: string
+                format: uuid
+              recipient_name:
+                type: string
+              content:
+                type: string
+              status:
+                type: string
+              read_at:
+                type: string
+                format: date-time
+                nullable: true
+              created_at:
+                type: string
+                format: date-time
+        total:
+          type: integer
+        unread_count:
+          type: integer
+
+    ConversationResponse:
+      type: object
+      properties:
+        conversation_with:
+          type: object
+          properties:
+            user_id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            role:
+              type: string
+        messages:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+
+    TenantResolution:
+      type: object
+      properties:
+        domain:
+          type: string
+        tenant_id:
+          type: string
+          format: uuid
+        tenant_code:
+          type: string
+        tenant_name:
+          type: string
+        is_primary:
+          type: boolean
+        tenant_status:
+          type: string
+          enum: [active, inactive, suspended]
+        domain_status:
+          type: string
+          enum: [active, inactive]
+
+    TenantSummary:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        tenant_code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        student_count:
+          type: integer
+        tutor_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    Tenant:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        tenant_code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+        domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantDomain'
+        primary_domain:
+          type: string
+        contact_info:
+          type: object
+        settings:
+          type: object
+        statistics:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TenantDomain:
+      type: object
+      properties:
+        domain_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+        is_primary:
+          type: boolean
+        status:
+          type: string
+          enum: [active, inactive]
+        created_at:
+          type: string
+          format: date-time
+
+    CreateTenantRequest:
+      type: object
+      required:
+        - tenant_code
+        - name
+        - domains
+        - primary_domain
+      properties:
+        tenant_code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        domains:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: At least one domain required
+        primary_domain:
+          type: string
+          description: Must be in domains array
+        contact_info:
+          type: object
+        settings:
+          type: object
+
+    UpdateTenantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        contact_info:
+          type: object
+        settings:
+          type: object
+
+    TenantStatistics:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        tenant_code:
+          type: string
+        users:
+          type: object
+          properties:
+            total_students:
+              type: integer
+            total_tutors:
+              type: integer
+            total_tenant_admins:
+              type: integer
+            active_accounts:
+              type: integer
+        activity:
+          type: object
+          properties:
+            total_sessions:
+              type: integer
+            total_questions:
+              type: integer
+            total_messages:
+              type: integer
+        performance:
+          type: object
+          properties:
+            average_score:
+              type: number
+              format: float
+            completion_rate:
+              type: number
+              format: float
+
+    CreateAdminRequest:
+      type: object
+      required:
+        - username
+        - email
+        - name
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        send_activation_email:
+          type: boolean
+
+    AdminAccount:
+      type: object
+      properties:
+        admin_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [tenant_admin, system_admin, super_admin]
+        status:
+          type: string
+          example: pending_activation
+        created_at:
+          type: string
+          format: date-time
+
+    AccountSummary:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, tutor, admin]
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+
+    AccountDetails:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+        profile:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        activity_history:
+          type: array
+          items:
+            type: object
+
+    AssignmentResponse:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        tutor_id:
+          type: string
+          format: uuid
+        assigned_at:
+          type: string
+          format: date-time
+        assigned_by:
+          type: string
+          format: uuid
+
+    SystemStatistics:
+      type: object
+      properties:
+        users:
+          type: object
+          properties:
+            total_students:
+              type: integer
+            total_tutors:
+              type: integer
+            total_admins:
+              type: integer
+            active_accounts:
+              type: integer
+            inactive_accounts:
+              type: integer
+        subjects:
+          type: object
+          properties:
+            total:
+              type: integer
+            active:
+              type: integer
+            inactive:
+              type: integer
+        activity:
+          type: object
+          properties:
+            total_sessions:
+              type: integer
+            total_questions:
+              type: integer
+            total_messages:
+              type: integer
+            active_sessions:
+              type: integer
+
+    AuditLog:
+      type: object
+      properties:
+        log_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          type: string
+        performed_by:
+          type: string
+          format: uuid
+        performed_by_role:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+          format: uuid
+        details:
+          type: object
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        domain:
+          type: string
+
+    CompetitionSummary:
+      type: object
+      properties:
+        competition_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        status:
+          type: string
+          enum: [upcoming, active, ended, cancelled]
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        registration_start:
+          type: string
+          format: date-time
+        registration_end:
+          type: string
+          format: date-time
+        participant_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    Competition:
+      type: object
+      properties:
+        competition_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        status:
+          type: string
+          enum: [upcoming, active, ended, cancelled]
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        registration_start:
+          type: string
+          format: date-time
+        registration_end:
+          type: string
+          format: date-time
+        rules:
+          type: object
+          properties:
+            time_limit:
+              type: integer
+            num_questions:
+              type: integer
+            difficulty:
+              type: string
+              enum: [beginner, intermediate, advanced]
+            allowed_question_types:
+              type: array
+              items:
+                type: string
+            max_attempts:
+              type: integer
+            scoring_rules:
+              type: object
+            hints_allowed:
+              type: boolean
+            narratives_allowed:
+              type: boolean
+        eligibility:
+          type: object
+          properties:
+            grade_levels:
+              type: array
+              items:
+                type: integer
+            tenant_restrictions:
+              type: array
+              items:
+                type: string
+                format: uuid
+            minimum_requirements:
+              type: object
+        visibility:
+          type: string
+          enum: [public, private, tenant_specific]
+        max_participants:
+          type: integer
+          nullable: true
+        participant_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCompetitionRequest:
+      type: object
+      required:
+        - name
+        - subject_id
+        - start_date
+        - end_date
+        - registration_start
+        - registration_end
+        - rules
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        subject_id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        registration_start:
+          type: string
+          format: date-time
+        registration_end:
+          type: string
+          format: date-time
+        rules:
+          type: object
+          required:
+            - num_questions
+            - difficulty
+          properties:
+            time_limit:
+              type: integer
+            num_questions:
+              type: integer
+            difficulty:
+              type: string
+              enum: [beginner, intermediate, advanced]
+            allowed_question_types:
+              type: array
+              items:
+                type: string
+            max_attempts:
+              type: integer
+              default: 1
+            scoring_rules:
+              type: object
+            hints_allowed:
+              type: boolean
+              default: false
+            narratives_allowed:
+              type: boolean
+              default: false
+        eligibility:
+          type: object
+          properties:
+            grade_levels:
+              type: array
+              items:
+                type: integer
+            tenant_restrictions:
+              type: array
+              items:
+                type: string
+                format: uuid
+            minimum_requirements:
+              type: object
+        visibility:
+          type: string
+          enum: [public, private, tenant_specific]
+          default: public
+        max_participants:
+          type: integer
+
+    UpdateCompetitionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        registration_start:
+          type: string
+          format: date-time
+        registration_end:
+          type: string
+          format: date-time
+        rules:
+          type: object
+        eligibility:
+          type: object
+        visibility:
+          type: string
+          enum: [public, private, tenant_specific]
+        max_participants:
+          type: integer
+
+    CompetitionRegistration:
+      type: object
+      properties:
+        registration_id:
+          type: string
+          format: uuid
+        competition_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [registered, confirmed, cancelled]
+        registered_at:
+          type: string
+          format: date-time
+
+    CompetitionLeaderboard:
+      type: object
+      properties:
+        competition_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [real_time, final]
+        last_updated:
+          type: string
+          format: date-time
+        leaderboard:
+          type: array
+          items:
+            type: object
+            properties:
+              rank:
+                type: integer
+              student_id:
+                type: string
+                format: uuid
+              student_name:
+                type: string
+              score:
+                type: number
+                format: float
+              max_score:
+                type: number
+                format: float
+              accuracy:
+                type: number
+                format: float
+              completion_time:
+                type: integer
+              questions_answered:
+                type: integer
+              completed_at:
+                type: string
+                format: date-time
+        total_participants:
+          type: integer
+        user_rank:
+          type: integer
+          nullable: true
+        user_position:
+          type: object
+          nullable: true
+
+    CompetitionSessionResponse:
+      type: object
+      properties:
+        competition_session_id:
+          type: string
+          format: uuid
+        competition_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        started_at:
+          type: string
+          format: date-time
+        time_limit:
+          type: integer
+        questions:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    CompetitionResults:
+      type: object
+      properties:
+        competition_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ended]
+        ended_at:
+          type: string
+          format: date-time
+        total_participants:
+          type: integer
+        winners:
+          type: array
+          items:
+            type: object
+            properties:
+              rank:
+                type: integer
+              student_id:
+                type: string
+                format: uuid
+              student_name:
+                type: string
+              score:
+                type: number
+                format: float
+              max_score:
+                type: number
+                format: float
+              accuracy:
+                type: number
+                format: float
+        statistics:
+          type: object
+          properties:
+            average_score:
+              type: number
+              format: float
+            highest_score:
+              type: number
+              format: float
+            participation_rate:
+              type: number
+              format: float
+            completion_rate:
+              type: number
+              format: float
+        leaderboard:
+          type: array
+          items:
+            type: object
+
+    StudentCompetitionResult:
+      type: object
+      properties:
+        competition_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        rank:
+          type: integer
+        score:
+          type: number
+          format: float
+        max_score:
+          type: number
+          format: float
+        accuracy:
+          type: number
+          format: float
+        questions_answered:
+          type: integer
+        completion_time:
+          type: integer
+        completed_at:
+          type: string
+          format: date-time
+        session_details:
+          type: object
+
+    CompetitionStatistics:
+      type: object
+      properties:
+        competition_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        registrations:
+          type: object
+          properties:
+            total:
+              type: integer
+            confirmed:
+              type: integer
+            cancelled:
+              type: integer
+        participation:
+          type: object
+          properties:
+            started:
+              type: integer
+            completed:
+              type: integer
+            completion_rate:
+              type: number
+              format: float
+        performance:
+          type: object
+          properties:
+            average_score:
+              type: number
+              format: float
+            highest_score:
+              type: number
+              format: float
+            lowest_score:
+              type: number
+              format: float
+            median_score:
+              type: number
+              format: float
+        timing:
+          type: object
+          properties:
+            average_completion_time:
+              type: integer
+            fastest_completion:
+              type: integer
+            slowest_completion:
+              type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
