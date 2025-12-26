@@ -91,9 +91,16 @@ def _parse_sql_statements(sql: str) -> list[str]:
         
         if not in_dollar_quote and char == ';':
             statement = ''.join(current_statement).strip()
-            # Remove leading comment lines but keep the actual SQL statement
+            # Remove leading comment lines and separator lines but keep the actual SQL statement
             lines = statement.split('\n')
-            sql_lines = [line for line in lines if line.strip() and not line.strip().startswith('--')]
+            sql_lines = []
+            for line in lines:
+                stripped = line.strip()
+                # Skip empty lines, comments, and separator lines (lines with only =, -, or _)
+                if stripped and not stripped.startswith('--'):
+                    # Skip separator lines (lines containing only =, -, _, or spaces)
+                    if not all(c in '=-_ ' for c in stripped):
+                        sql_lines.append(line)
             if sql_lines:
                 clean_statement = '\n'.join(sql_lines).strip()
                 if clean_statement:
@@ -105,7 +112,14 @@ def _parse_sql_statements(sql: str) -> list[str]:
     if current_statement:
         statement = ''.join(current_statement).strip()
         lines = statement.split('\n')
-        sql_lines = [line for line in lines if line.strip() and not line.strip().startswith('--')]
+        sql_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Skip empty lines, comments, and separator lines (lines with only =, -, or _)
+            if stripped and not stripped.startswith('--'):
+                # Skip separator lines (lines containing only =, -, _, or spaces)
+                if not all(c in '=-_ ' for c in stripped):
+                    sql_lines.append(line)
         if sql_lines:
             clean_statement = '\n'.join(sql_lines).strip()
             if clean_statement:

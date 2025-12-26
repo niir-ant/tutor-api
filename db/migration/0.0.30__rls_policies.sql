@@ -249,9 +249,7 @@ CREATE POLICY tenant_domains_modify_system_admin ON tutor.tenant_domains
     USING (tutor.is_system_admin())
     WITH CHECK (tutor.is_system_admin());
 
--- Everyone can see active subjects (system-wide)
-DROP POLICY IF EXISTS subjects_select_all ON subjects;
-=============================
+-- ============================================================================
 -- SUBJECTS RLS POLICIES
 -- ============================================================================
 

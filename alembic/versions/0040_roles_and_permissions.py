@@ -8,10 +8,17 @@ Create Date: 2025-12-25 17:00:00.000000
 from alembic import op
 from pathlib import Path
 import sys
+import os
+from dotenv import load_dotenv
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+
+# Load environment variables from .env file
+env_file = project_root / '.env'
+if env_file.exists():
+    load_dotenv(env_file)
 
 # revision identifiers, used by Alembic.
 revision = '0040'
@@ -29,6 +36,36 @@ def upgrade() -> None:
     
     with open(sql_file, 'r', encoding='utf-8') as f:
         sql = f.read()
+    
+    # Get passwords from environment variables with fallback defaults
+    app_user_password = os.getenv('DB_APP_USER_PASSWORD', 'CHANGE_ME_IN_PRODUCTION')
+    app_readonly_password = os.getenv('DB_APP_READONLY_PASSWORD', 'CHANGE_ME_IN_PRODUCTION')
+    app_migrator_password = os.getenv('DB_APP_MIGRATOR_PASSWORD', 'CHANGE_ME_IN_PRODUCTION')
+    
+    # Escape single quotes in passwords for SQL
+    def escape_sql_string(s: str) -> str:
+        return s.replace("'", "''")
+    
+    app_user_password_escaped = escape_sql_string(app_user_password)
+    app_readonly_password_escaped = escape_sql_string(app_readonly_password)
+    app_migrator_password_escaped = escape_sql_string(app_migrator_password)
+    
+    # Replace password placeholders in DO blocks
+    # Replace in app_user DO block
+    sql = sql.replace(
+        "CREATE ROLE app_user WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';",
+        f"CREATE ROLE app_user WITH LOGIN PASSWORD '{app_user_password_escaped}';"
+    )
+    # Replace in app_readonly DO block
+    sql = sql.replace(
+        "CREATE ROLE app_readonly WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';",
+        f"CREATE ROLE app_readonly WITH LOGIN PASSWORD '{app_readonly_password_escaped}';"
+    )
+    # Replace in app_migrator DO block
+    sql = sql.replace(
+        "CREATE ROLE app_migrator WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';",
+        f"CREATE ROLE app_migrator WITH LOGIN PASSWORD '{app_migrator_password_escaped}';"
+    )
     
     # Parse SQL into individual statements
     statements = _parse_sql_statements(sql)

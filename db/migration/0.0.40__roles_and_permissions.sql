@@ -30,13 +30,32 @@ DROP FUNCTION IF EXISTS tutor.can_access_tutor(UUID) CASCADE;
 -- ============================================================================
 
 -- Application role (used by the API application)
-CREATE ROLE app_user WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';
+-- Create role only if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
+        CREATE ROLE app_user WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';
+    END IF;
+END
+$$;
 
 -- Read-only role for reporting/analytics
-CREATE ROLE app_readonly WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_readonly') THEN
+        CREATE ROLE app_readonly WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';
+    END IF;
+END
+$$;
 
 -- Migration role (for running migrations)
-CREATE ROLE app_migrator WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_migrator') THEN
+        CREATE ROLE app_migrator WITH LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION';
+    END IF;
+END
+$$;
 
 -- ============================================================================
 -- GRANT PERMISSIONS TO APPLICATION ROLE

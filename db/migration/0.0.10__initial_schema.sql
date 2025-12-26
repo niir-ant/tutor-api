@@ -197,16 +197,9 @@ CREATE TABLE tutor.user_subject_roles (
     updated_by UUID,
     notes TEXT,
     CONSTRAINT user_subject_roles_role_check CHECK (role IN ('student', 'tutor')),
-    CONSTRAINT user_subject_roles_unique UNIQUE (user_id, subject_id, role),
-    CONSTRAINT user_subject_roles_no_duplicate_roles CHECK (
-        NOT EXISTS (
-            SELECT 1 FROM tutor.user_subject_roles usr2
-            WHERE usr2.user_id = tutor.user_subject_roles.user_id
-            AND usr2.subject_id = tutor.user_subject_roles.subject_id
-            AND usr2.role != tutor.user_subject_roles.role
-            AND usr2.status = 'active'
-        )
-    )
+    CONSTRAINT user_subject_roles_unique UNIQUE (user_id, subject_id, role)
+    -- Note: Preventing a user from having both 'student' and 'tutor' roles for the same subject
+    -- is enforced by application logic. PostgreSQL CHECK constraints cannot use subqueries.
 );
 
 -- Student Subject Profile - student-specific data per subject
