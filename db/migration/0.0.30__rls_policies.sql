@@ -54,6 +54,7 @@ ALTER TABLE tutor.audit_logs ENABLE ROW LEVEL SECURITY;
 -- DROP HELPER FUNCTIONS
 -- ============================================================================
 
+DROP FUNCTION IF EXISTS tutor.set_context(UUID, UUID, tutor.user_role);
 DROP FUNCTION IF EXISTS tutor.has_tutor_role_for_subject(UUID);
 DROP FUNCTION IF EXISTS tutor.has_student_role_for_subject(UUID);
 DROP FUNCTION IF EXISTS tutor.is_student();
@@ -65,21 +66,69 @@ DROP FUNCTION IF EXISTS tutor.current_user_role();
 DROP FUNCTION IF EXISTS tutor.current_tenant_id();
 
 -- ============================================================================
+-- CREATE CONTEXT MANAGEMENT FUNCTIONS
+-- ============================================================================
+
+-- Function to set transaction-local context for RLS
+-- This function MUST be called at the beginning of each transaction
+-- DO NOT use SET commands directly - use this function instead
+CREATE OR REPLACE FUNCTION tutor.set_context(
+    p_tenant_id UUID,
+    p_user_id UUID,
+    p_user_role tutor.user_role
+) RETURNS VOID AS $$
+BEGIN
+    -- Validate inputs
+    IF p_tenant_id IS NULL AND p_user_role != 'system_admin' THEN
+        RAISE EXCEPTION 'tenant_id cannot be NULL for non-system-admin users';
+    END IF;
+    
+    IF p_user_id IS NULL THEN
+        RAISE EXCEPTION 'user_id cannot be NULL';
+    END IF;
+    
+    IF p_user_role IS NULL THEN
+        RAISE EXCEPTION 'user_role cannot be NULL';
+    END IF;
+    
+    -- Set transaction-local context variables (automatically rolled back on transaction end)
+    -- FALSE parameter makes it transaction-local (equivalent to SET LOCAL)
+    -- For system_admin with NULL tenant_id, the variable will be set but current_tenant_id()
+    -- will return NULL (which is correct - system_admin can access all tenants)
+    PERFORM set_config('app.current_tenant_id', COALESCE(p_tenant_id::TEXT, ''), FALSE);
+    PERFORM set_config('app.current_user_id', p_user_id::TEXT, FALSE);
+    PERFORM set_config('app.current_user_role', p_user_role::TEXT, FALSE);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to app_user
+GRANT EXECUTE ON FUNCTION tutor.set_context(UUID, UUID, tutor.user_role) TO app_user;
+
+-- ============================================================================
 -- CREATE HELPER FUNCTIONS FOR RLS
 -- ============================================================================
 
--- Function to get current user's tenant_id from JWT claim
--- This assumes the application sets a session variable 'app.current_tenant_id'
+-- Function to get current user's tenant_id from context
+-- Reads from transaction-local context set by tutor.set_context()
+-- Returns NULL for system_admin (empty string is converted to NULL)
 CREATE OR REPLACE FUNCTION tutor.current_tenant_id() RETURNS UUID AS $$
+DECLARE
+    v_tenant_id_text TEXT;
 BEGIN
-    RETURN current_setting('app.current_tenant_id', TRUE)::UUID;
+    v_tenant_id_text := current_setting('app.current_tenant_id', TRUE);
+    -- Empty string means system_admin (access all tenants) - return NULL
+    IF v_tenant_id_text = '' OR v_tenant_id_text IS NULL THEN
+        RETURN NULL;
+    END IF;
+    RETURN v_tenant_id_text::UUID;
 EXCEPTION
     WHEN OTHERS THEN
         RETURN NULL;
 END;
 $$ LANGUAGE plpgsql STABLE;
 
--- Function to get current user's role from JWT claim
+-- Function to get current user's role from context
+-- Reads from transaction-local context set by tutor.set_context()
 CREATE OR REPLACE FUNCTION tutor.current_user_role() RETURNS tutor.user_role AS $$
 BEGIN
     RETURN current_setting('app.current_user_role', TRUE)::tutor.user_role;
@@ -89,7 +138,8 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql STABLE;
 
--- Function to get current user's ID from JWT claim
+-- Function to get current user's ID from context
+-- Reads from transaction-local context set by tutor.set_context()
 CREATE OR REPLACE FUNCTION tutor.current_user_id() RETURNS UUID AS $$
 BEGIN
     RETURN current_setting('app.current_user_id', TRUE)::UUID;

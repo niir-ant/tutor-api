@@ -274,10 +274,13 @@ COMMENT ON ROLE app_migrator IS 'Role for running database migrations';
 -- 1. Change all default passwords before deploying to production
 -- 2. Use connection pooling with appropriate user roles
 -- 3. RLS policies enforce tenant isolation at the database level
--- 4. Application must set session variables:
---    - app.current_tenant_id (UUID)
---    - app.current_user_id (UUID)
---    - app.current_user_role (user_role enum)
+-- 4. Application MUST use tutor.set_context() function to set context:
+--    DO NOT use SET commands directly. Call tutor.set_context() at the start
+--    of each transaction with:
+--    - tenant_id (UUID, can be NULL for system_admin)
+--    - user_id (UUID, required)
+--    - user_role (user_role enum: 'student', 'tutor', 'tenant_admin', 'system_admin')
+--    See db/migration/README_CONTEXT.md for detailed instructions
 -- 5. Use SSL/TLS for all database connections
 -- 6. Regularly audit role permissions and RLS policies
 -- 7. Consider using separate schemas for different tenants (advanced multi-tenancy)

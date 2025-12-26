@@ -77,31 +77,40 @@ ALTER ROLE app_migrator WITH PASSWORD 'your_secure_password';
 
 ## Row Level Security (RLS)
 
-The database uses Row Level Security to enforce multi-tenant data isolation. The application must set the following session variables for each database connection:
+The database uses Row Level Security to enforce multi-tenant data isolation. **The application MUST use the `tutor.set_context()` function to set context - DO NOT use SET commands directly.**
 
 ```sql
-SET app.current_tenant_id = 'uuid-of-tenant';
-SET app.current_user_id = 'uuid-of-user';
-SET app.current_user_role = 'student' | 'tutor' | 'tenant_admin' | 'system_admin';
+-- Correct way to set context (use this function)
+SELECT tutor.set_context(
+    'uuid-of-tenant'::UUID,
+    'uuid-of-user'::UUID,
+    'student'::tutor.user_role
+);
+
+-- WRONG - Do not use SET commands directly
+-- SET app.current_tenant_id = 'uuid-of-tenant';  ❌
 ```
 
-### Example Application Code (Python/psycopg2)
+### Documentation
+
+For detailed instructions on setting context, see **[README_CONTEXT.md](README_CONTEXT.md)**.
+
+### Quick Example (Python/SQLAlchemy)
 
 ```python
-import psycopg2
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="tutor",
-    user="app_user",
-    password="your_password"
-)
-
-cursor = conn.cursor()
-cursor.execute("SET app.current_tenant_id = %s", (tenant_id,))
-cursor.execute("SET app.current_user_id = %s", (user_id,))
-cursor.execute("SET app.current_user_role = %s", (user_role,))
-conn.commit()
+def set_db_context(db: Session, tenant_id: UUID, user_id: UUID, user_role: str):
+    """Set transaction-local context for RLS using tutor.set_context()"""
+    db.execute(
+        text("SELECT tutor.set_context(:tenant_id, :user_id, :role::tutor.user_role)"),
+        {
+            "tenant_id": str(tenant_id) if tenant_id else None,
+            "user_id": str(user_id),
+            "role": user_role
+        }
+    )
 ```
 
 ## Database Roles
@@ -111,16 +120,19 @@ conn.commit()
 - Full CRUD access to all tables
 - RLS policies enforce tenant isolation
 - Used by the API application
+- Has EXECUTE permission on all functions in the `tutor` schema
 
 ### app_readonly
 - Read-only access for reporting/analytics
-- Can only SELECT from tables
+- Can only SELECT from tables and views
 - Useful for BI tools and reporting dashboards
+- No write permissions
 
 ### app_migrator
 - Full privileges for running migrations
 - Should only be used during deployment
 - Not for application runtime
+- Can bypass RLS for migration operations
 
 ## Schema Overview
 
@@ -129,34 +141,67 @@ conn.commit()
 - **tenants** - Multi-tenant educational institutions
 - **tenant_domains** - Domain mappings for tenant resolution
 - **subjects** - Subjects/courses (system-wide or tenant-specific)
-- **student_accounts** - Student user accounts
-- **tutor_accounts** - Tutor user accounts
-- **administrator_accounts** - Admin accounts (tenant and system level)
+- **user_accounts** - Parent table for tenant-scoped user accounts (students, tutors, tenant admins)
+- **user_subject_roles** - Subject-level role assignments (student or tutor per subject)
+- **student_subject_profiles** - Student-specific data per subject
+- **tutor_subject_profiles** - Tutor-specific data per subject
+- **tenant_admin_accounts** - Tenant administrator accounts (extends user_accounts)
+- **system_admin_accounts** - System administrator accounts (separate table, not tenant-scoped)
 
 ### Quiz & Learning Tables
 
-- **questions** - AI-generated quiz questions
+- **questions** - AI-generated quiz questions (system-wide or tenant-specific)
 - **quiz_sessions** - Quiz session tracking
-- **answer_submissions** - Student answer submissions
-- **hints** - AI-generated hints
-- **student_progress** - Aggregated progress statistics
+- **answer_submissions** - Student answer submissions with validation results
+- **hints** - AI-generated hints for questions
+- **student_progress** - Aggregated student progress statistics per subject
 
 ### Relationship Tables
 
-- **student_tutor_assignments** - Student-tutor relationships
-- **messages** - Student-tutor messaging
+- **student_tutor_assignments** - Student-tutor assignment relationships (subject-specific)
+- **messages** - Student-tutor messaging system
 
 ### Competition Tables
 
-- **competitions** - One-time competitions per subject
-- **competition_registrations** - Student registrations
-- **competition_sessions** - Competition-specific sessions
+- **competitions** - One-time competitions per subject (system-wide or tenant-specific)
+- **competition_registrations** - Student registrations for competitions
+- **competition_sessions** - Competition-specific quiz sessions
 
 ### System Tables
 
-- **password_reset_otp** - Password reset tokens
-- **authentication_tokens** - JWT token storage
-- **audit_logs** - Audit trail for admin actions
+- **password_reset_otp** - Password reset OTP codes (hashed)
+- **authentication_tokens** - JWT token storage (for tenant users and system admins)
+- **audit_logs** - Audit trail for administrative actions
+
+### Views
+
+- **v_active_students_with_tutors** - Active students with their tutor assignments (by subject)
+- **v_competition_leaderboard** - Competition leaderboards with rankings
+
+### Helper Functions
+
+The migration creates several helper functions for RLS and context management:
+
+**Context Management:**
+- `tutor.set_context(tenant_id, user_id, user_role)` - Set transaction-local context (MUST be called at start of each transaction)
+
+**Context Retrieval:**
+- `tutor.current_tenant_id()` - Get current tenant ID from context
+- `tutor.current_user_id()` - Get current user ID from context
+- `tutor.current_user_role()` - Get current user role from context
+
+**Role Checks:**
+- `tutor.is_system_admin()` - Check if current user is system admin
+- `tutor.is_tenant_admin()` - Check if current user is tenant admin
+- `tutor.is_tutor()` - Check if current user is tutor
+- `tutor.is_student()` - Check if current user is student
+- `tutor.has_student_role_for_subject(subject_id)` - Check if user has student role for a subject
+- `tutor.has_tutor_role_for_subject(subject_id)` - Check if user has tutor role for a subject
+
+**Access Control:**
+- `tutor.can_access_tenant(tenant_id)` - Check if current user can access a tenant
+- `tutor.can_access_student(student_id)` - Check if current user can access a student
+- `tutor.can_access_tutor(tutor_id)` - Check if current user can access a tutor
 
 ## Security Considerations
 
@@ -164,7 +209,7 @@ conn.commit()
 2. **Role-Based Access**: Different access levels for students, tutors, and admins
 3. **Password Security**: All passwords are hashed (bcrypt/Argon2) - never stored in plain text
 4. **OTP Security**: OTP codes are hashed before storage
-5. **Session Variables**: Application must set tenant/user context for each connection
+5. **Context Function**: Application must call `tutor.set_context()` at the start of each transaction (see README_CONTEXT.md)
 6. **SSL/TLS**: Use encrypted connections for all database access
 
 ## Indexes
@@ -194,7 +239,7 @@ Check RLS policy usage:
 ```sql
 SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual
 FROM pg_policies
-WHERE schemaname = 'public';
+WHERE schemaname = 'tutor';
 ```
 
 ### Backup
@@ -210,9 +255,10 @@ pg_dump -U app_migrator -d tutor -F c -f backup_$(date +%Y%m%d).dump
 ### RLS Policy Issues
 
 If queries are returning no rows unexpectedly, check:
-1. Session variables are set correctly
+1. `tutor.set_context()` was called at the start of the transaction
 2. User role matches expected role
 3. Tenant ID matches the data's tenant_id
+4. See README_CONTEXT.md for detailed troubleshooting
 
 ### Permission Errors
 
