@@ -1065,14 +1065,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tutor'
 
-  /tutors/{tutor_id}/students:
+  /tutors/{tutor_id}/subjects/{subject_id}/students:
     get:
       tags:
         - Tutors
-      summary: Get tutor's students
-      description: Get list of students assigned to a tutor
+      summary: Get tutor's students for subject
+      description: Get list of students assigned to a tutor for a specific subject
       parameters:
         - name: tutor_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject_id
           in: path
           required: true
           schema:
@@ -1086,14 +1092,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/TutorStudentsResponse'
 
-  /tutors/{tutor_id}/students/{student_id}/progress:
+  /tutors/{tutor_id}/students:
     get:
       tags:
         - Tutors
-      summary: Get student progress (tutor view)
-      description: Get student progress from tutor's perspective
+      summary: Get all tutor's students (all subjects)
+      description: Get all students assigned to a tutor, grouped by subject
       parameters:
         - name: tutor_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject_id
+          in: query
+          description: Optional filter by subject
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Students retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorStudentsBySubjectResponse'
+
+  /tutors/{tutor_id}/subjects/{subject_id}/students/{student_id}/progress:
+    get:
+      tags:
+        - Tutors
+      summary: Get student progress (tutor view) for subject
+      description: Get student progress from tutor's perspective for a specific subject
+      parameters:
+        - name: tutor_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject_id
           in: path
           required: true
           schema:
@@ -1964,12 +2003,222 @@ paths:
               schema:
                 $ref: '#/components/schemas/TutorAccountResponse'
 
+  /admin/users/{user_id}/subjects/{subject_id}/role:
+    post:
+      tags:
+        - System Admin
+        - Tenant Admin
+      summary: Assign subject role to user
+      description: Assign a role (student or tutor) to a user for a specific subject
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [student, tutor]
+                create_profile:
+                  type: boolean
+                  description: Create subject-specific profile, default true
+                  default: true
+      responses:
+        '200':
+          description: Role assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectRoleAssignment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - System Admin
+        - Tenant Admin
+      summary: Update subject role for user
+      description: Update a user's role for a specific subject (changing role replaces previous role)
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [student, tutor]
+                status:
+                  type: string
+                  enum: [active, inactive]
+                  description: Optional, deactivate without removing
+      responses:
+        '200':
+          description: Role updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectRoleAssignment'
+    delete:
+      tags:
+        - System Admin
+        - Tenant Admin
+      summary: Remove subject role from user
+      description: Remove a role assignment from a user for a specific subject
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Role removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignment_id:
+                    type: string
+                    format: uuid
+                  user_id:
+                    type: string
+                    format: uuid
+                  subject_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: removed
+                  removed_at:
+                    type: string
+                    format: date-time
+                  message:
+                    type: string
+
+  /admin/users/{user_id}/roles:
+    get:
+      tags:
+        - System Admin
+        - Tenant Admin
+      summary: Get user's subject roles
+      description: Get all subject-level role assignments for a user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subject_id
+          in: query
+          description: Optional filter by subject
+          schema:
+            type: string
+            format: uuid
+        - name: role
+          in: query
+          description: Optional filter by role
+          schema:
+            type: string
+            enum: [student, tutor]
+        - name: status
+          in: query
+          description: Optional filter by status
+          schema:
+            type: string
+            enum: [active, inactive, all]
+      responses:
+        '200':
+          description: Roles retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSubjectRolesResponse'
+
+  /admin/subjects/{subject_id}/users:
+    get:
+      tags:
+        - System Admin
+        - Tenant Admin
+      summary: Get subject's users by role
+      description: Get all users with roles for a specific subject
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: role
+          in: query
+          description: Optional filter by role
+          schema:
+            type: string
+            enum: [student, tutor, all]
+        - name: status
+          in: query
+          description: Optional filter by status
+          schema:
+            type: string
+            enum: [active, inactive, all]
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectUsersResponse'
+
   /admin/assignments:
     post:
       tags:
         - Tutors
-      summary: Assign student to tutor
-      description: Assign a student to a tutor (admin only)
+      summary: Assign student to tutor for subject
+      description: Assign a student to a tutor for a specific subject (admin only)
       requestBody:
         required: true
         content:
@@ -1979,6 +2228,7 @@ paths:
               required:
                 - student_id
                 - tutor_id
+                - subject_id
               properties:
                 student_id:
                   type: string
@@ -1986,6 +2236,10 @@ paths:
                 tutor_id:
                   type: string
                   format: uuid
+                subject_id:
+                  type: string
+                  format: uuid
+                  description: Subject for which the assignment applies
       responses:
         '200':
           description: Assignment created successfully
@@ -1998,8 +2252,8 @@ paths:
     post:
       tags:
         - Tutors
-      summary: Bulk assign students to tutor
-      description: Assign multiple students to a tutor (admin only)
+      summary: Bulk assign students to tutor for subject
+      description: Assign multiple students to a tutor for a specific subject (admin only)
       requestBody:
         required: true
         content:
@@ -2009,6 +2263,7 @@ paths:
               required:
                 - tutor_id
                 - student_ids
+                - subject_id
               properties:
                 tutor_id:
                   type: string
@@ -2018,6 +2273,10 @@ paths:
                   items:
                     type: string
                     format: uuid
+                subject_id:
+                  type: string
+                  format: uuid
+                  description: Subject for which the assignments apply
       responses:
         '200':
           description: Bulk assignment completed
@@ -2027,6 +2286,9 @@ paths:
                 type: object
                 properties:
                   tutor_id:
+                    type: string
+                    format: uuid
+                  subject_id:
                     type: string
                     format: uuid
                   assigned_count:
@@ -2188,8 +2450,8 @@ paths:
     post:
       tags:
         - Tenant Admin
-      summary: Assign student to tutor (within tenant)
-      description: Assign a student to a tutor within the tenant
+      summary: Assign student to tutor for subject (within tenant)
+      description: Assign a student to a tutor for a specific subject within the tenant
       requestBody:
         required: true
         content:
@@ -2199,6 +2461,7 @@ paths:
               required:
                 - student_id
                 - tutor_id
+                - subject_id
               properties:
                 student_id:
                   type: string
@@ -2206,6 +2469,10 @@ paths:
                 tutor_id:
                   type: string
                   format: uuid
+                subject_id:
+                  type: string
+                  format: uuid
+                  description: Subject for which the assignment applies
       responses:
         '200':
           description: Assignment created successfully
@@ -2249,8 +2516,8 @@ paths:
     post:
       tags:
         - Tenant Admin
-      summary: Bulk assign students to tutor (within tenant)
-      description: Assign multiple students to a tutor within the tenant
+      summary: Bulk assign students to tutor for subject (within tenant)
+      description: Assign multiple students to a tutor for a specific subject within the tenant
       requestBody:
         required: true
         content:
@@ -2260,6 +2527,7 @@ paths:
               required:
                 - tutor_id
                 - student_ids
+                - subject_id
               properties:
                 tutor_id:
                   type: string
@@ -2269,6 +2537,10 @@ paths:
                   items:
                     type: string
                     format: uuid
+                subject_id:
+                  type: string
+                  format: uuid
+                  description: Subject for which the assignments apply
       responses:
         '200':
           description: Bulk assignment completed
@@ -2278,6 +2550,9 @@ paths:
                 type: object
                 properties:
                   tutor_id:
+                    type: string
+                    format: uuid
+                  subject_id:
                     type: string
                     format: uuid
                   assigned_count:
@@ -2360,15 +2635,30 @@ components:
           type: string
         role:
           type: string
-          enum: [student, tutor, tenant_admin, system_admin]
+          enum: [tenant_admin, system_admin]
+          description: Only for tenant_admin and system_admin. Students and tutors have subject-level roles.
         tenant_id:
           type: string
           format: uuid
           nullable: true
           description: Null for system_admin
-        grade_level:
-          type: integer
-          description: For students
+        subject_roles:
+          type: array
+          description: Array of subject-level role assignments (for students and tutors)
+          items:
+            type: object
+            properties:
+              subject_id:
+                type: string
+                format: uuid
+              subject_code:
+                type: string
+              role:
+                type: string
+                enum: [student, tutor]
+              status:
+                type: string
+                enum: [active, inactive]
         requires_password_change:
           type: boolean
         account_status:
@@ -3017,6 +3307,11 @@ components:
         tutor_id:
           type: string
           format: uuid
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
         students:
           type: array
           items:
@@ -3041,6 +3336,50 @@ components:
         total:
           type: integer
 
+    TutorStudentsBySubjectResponse:
+      type: object
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        students_by_subject:
+          type: array
+          items:
+            type: object
+            properties:
+              subject_id:
+                type: string
+                format: uuid
+              subject_code:
+                type: string
+              subject_name:
+                type: string
+              students:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    student_id:
+                      type: string
+                      format: uuid
+                    username:
+                      type: string
+                    name:
+                      type: string
+                    email:
+                      type: string
+                    grade_level:
+                      type: integer
+                    assigned_at:
+                      type: string
+                      format: date-time
+                    progress_summary:
+                      type: object
+              total_students:
+                type: integer
+        total_students:
+          type: integer
+
     TutorStudentProgress:
       type: object
       properties:
@@ -3049,10 +3388,24 @@ components:
           format: uuid
         student_name:
           type: string
-        overall_stats:
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        subject_stats:
           type: object
-        by_subject:
-          type: object
+          properties:
+            total_questions:
+              type: integer
+            correct_answers:
+              type: integer
+            accuracy:
+              type: number
+              format: float
+            average_score:
+              type: number
+              format: float
         recent_sessions:
           type: array
         weak_areas:
@@ -3063,6 +3416,102 @@ components:
           type: array
           items:
             type: string
+
+    SubjectRoleAssignment:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        subject_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [student, tutor]
+        status:
+          type: string
+          enum: [active, inactive]
+        assigned_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+
+    UserSubjectRolesResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        roles:
+          type: array
+          items:
+            type: object
+            properties:
+              assignment_id:
+                type: string
+                format: uuid
+              subject_id:
+                type: string
+                format: uuid
+              subject_code:
+                type: string
+              subject_name:
+                type: string
+              role:
+                type: string
+                enum: [student, tutor]
+              status:
+                type: string
+                enum: [active, inactive]
+              assigned_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+        total:
+          type: integer
+
+    SubjectUsersResponse:
+      type: object
+      properties:
+        subject_id:
+          type: string
+          format: uuid
+        subject_code:
+          type: string
+        users:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id:
+                type: string
+                format: uuid
+              username:
+                type: string
+              email:
+                type: string
+              role:
+                type: string
+                enum: [student, tutor]
+              status:
+                type: string
+                enum: [active, inactive]
+              assigned_at:
+                type: string
+                format: date-time
+        total:
+          type: integer
 
     SendMessageRequest:
       type: object
@@ -3443,6 +3892,10 @@ components:
         assignment_id:
           type: string
           format: uuid
+        subject_id:
+          type: string
+          format: uuid
+          description: Subject for which the assignment applies
         student_id:
           type: string
           format: uuid

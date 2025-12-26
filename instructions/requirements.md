@@ -411,40 +411,61 @@ The API will serve as a backend service for educational applications, providing:
 
 ### 2.10 Tutor Management
 
-#### 2.10.1 Tutor Account Management
-- **FR-9.1**: Support tutor account creation and management
-- **FR-9.2**: Tutor accounts shall have:
-  - Unique tutor identifier
-  - Authentication credentials (username/email, password)
-  - Tutor profile information (name, email, contact details)
-  - Account status (active, inactive, suspended)
-  - Assigned students (team of students)
-- **FR-10.3**: Tutor account creation:
-  - Can be created by administrators
-  - Can be converted from existing student account (by admin)
-  - Requires password setup (similar to student accounts)
-  - Can have preset account creation with first-time password change
+#### 2.10.1 Subject-Level Role Management
+- **FR-10.1**: Support subject-level role assignments where users can have different roles (student or tutor) for different subjects
+- **FR-10.2**: Role assignment rules:
+  - A user can be a student OR a tutor for a specific subject, but not both for the same subject
+  - A user can be a student for one or more subjects
+  - A user can be a tutor for one or more subjects
+  - A user can be a student for some subjects and a tutor for other subjects simultaneously
+  - Role assignments are subject-specific and independent
+- **FR-10.3**: Role assignment management:
+  - Tenant admins can assign roles to users for specific subjects
+  - Tenant admins can change a user's role for a subject at any time (e.g., from student to tutor or vice versa)
+  - Role changes are immediate and affect access to subject-specific features
+  - When changing a role, the previous role assignment for that subject is replaced
+  - System admins can also manage role assignments across all tenants
+- **FR-10.4**: Role assignment validation:
+  - Verify user belongs to the tenant before assigning role
+  - Verify subject exists and is active
+  - Prevent duplicate role assignments (user cannot be both student and tutor for same subject)
+  - When assigning tutor role, optionally create tutor subject profile
+  - When assigning student role, optionally create student subject profile
 
-#### 2.10.2 Student-Tutor Assignment
-- **FR-10.4**: Support assignment of students to tutors:
-  - One tutor can have multiple students (team)
-  - One student can be assigned to one tutor (or optionally multiple tutors)
+#### 2.10.2 Tutor Account Management
+- **FR-10.5**: Tutor role is assigned per subject, not globally
+- **FR-10.6**: A user with tutor role for a subject can:
+  - View assigned students' progress for that subject
+  - View student quiz history and results for that subject
+  - Access student analytics and reports for that subject
+  - Send messages to assigned students
+  - Receive and respond to messages from assigned students
+  - Have subject-specific tutor profile (bio, specializations, qualifications)
+
+#### 2.10.3 Student-Tutor Assignment
+- **FR-10.7**: Support subject-specific assignment of students to tutors:
+  - Assignments are per subject (a student can have different tutors for different subjects)
+  - One tutor can have multiple students for a specific subject (team)
+  - One student can be assigned to one tutor per subject (or optionally multiple tutors per subject)
   - Assignment managed by administrators
-  - Track assignment history (when assigned, by whom)
-- **FR-10.5**: Tutor team management:
-  - View all assigned students
-  - View student progress and performance
-  - Filter and search students in team
-  - Get team statistics and analytics
+  - Track assignment history (when assigned, by whom, for which subject)
+  - Both student and tutor must have the appropriate roles for the subject
+- **FR-10.8**: Tutor team management:
+  - View all assigned students for a specific subject
+  - View student progress and performance per subject
+  - Filter and search students in team by subject
+  - Get team statistics and analytics per subject
+  - Tutors can manage multiple teams (one per subject they tutor)
 
-#### 2.10.3 Tutor Capabilities
-- **FR-10.6**: Tutors shall be able to:
-  - View assigned students' progress and performance
-  - View student quiz history and results
-  - Access student analytics and reports
+#### 2.10.4 Tutor Capabilities
+- **FR-10.9**: Tutors shall be able to (per subject where they have tutor role):
+  - View assigned students' progress and performance for that subject
+  - View student quiz history and results for that subject
+  - Access student analytics and reports for that subject
   - Send messages to assigned students
   - Receive and respond to messages from assigned students
   - View messaging history with students
+  - Manage subject-specific tutor profile
 
 ### 2.11 Messaging System
 
@@ -493,9 +514,9 @@ The API will serve as a backend service for educational applications, providing:
   - Authentication credentials (username/email, password)
   - Admin profile information
   - Account status (active, inactive)
-  - Permission levels (super admin, admin, limited admin)
+  - Permission levels (system admin, tenant admin, limited admin)
 - **FR-11.3**: Admin account creation:
-  - Created by existing super administrators
+  - Created by existing system administrators
   - Requires secure setup process
   - Can be preset with first-time password change
 
@@ -655,30 +676,36 @@ The API will serve as a backend service for educational applications, providing:
 ### 2.14 Role-Based Access Control
 
 #### 2.14.1 User Roles
-- **FR-14.1**: Support four primary roles:
-  - Student: Can take quizzes, view own progress, message tutor (within tenant)
-  - Tutor: Can view assigned students' progress, message students, respond to messages (within tenant)
-  - Tenant Admin: Manage accounts and courses within their tenant only
-  - System Admin: Full system access, manage tenants, all accounts, system-wide courses
-- **FR-14.2**: Role-based permissions:
-  - Each role has specific API endpoint access
-  - Role validation on all protected endpoints
+- **FR-14.1**: Support role types:
+  - Student (subject-level): Can take quizzes for subjects where they have student role, view own progress per subject, message tutor for that subject (within tenant)
+  - Tutor (subject-level): Can view assigned students' progress for subjects where they have tutor role, message students, respond to messages (within tenant)
+  - Tenant Admin: Manage accounts and courses within their tenant only, manage subject-level role assignments
+  - System Admin: Full system access, manage tenants, all accounts, system-wide courses, manage role assignments across tenants
+- **FR-14.2**: Subject-level role-based permissions:
+  - Users have roles per subject (student or tutor for each subject)
+  - A user can be a student for some subjects and a tutor for other subjects simultaneously
+  - A user cannot be both student and tutor for the same subject
+  - Role validation on all subject-specific endpoints must verify the user has the appropriate role for that subject
   - Hierarchical permissions (system admin > tenant admin > tutor > student)
   - Tenant-scoped permissions for tenant admin, tutor, and student
+  - Access to subject-specific features requires the appropriate role for that subject
 
 #### 2.14.2 Access Control
 - **FR-14.3**: Enforce access control:
-  - Students can only access their own data within their tenant
-  - Tutors can only access their assigned students' data within their tenant
-  - Tenant admins can only access data within their tenant
-  - System admins can access all data across all tenants
+  - Students can only access their own data for subjects where they have student role, within their tenant
+  - Tutors can only access their assigned students' data for subjects where they have tutor role, within their tenant
+  - Users cannot access subject-specific features for subjects where they don't have the appropriate role
+  - Tenant admins can only access data within their tenant, can manage role assignments for all users in their tenant
+  - System admins can access all data across all tenants, can manage role assignments across all tenants
   - Prevent unauthorized cross-tenant data access
-  - Audit access attempts with tenant context
-- **FR-14.4**: Tenant isolation enforcement:
+  - Audit access attempts with tenant and subject context
+- **FR-14.4**: Tenant and subject isolation enforcement:
   - All data queries must include tenant_id filter
+  - Subject-specific queries must verify user has appropriate role for that subject
   - API responses must only include tenant-scoped data
-  - Prevent tenant_id manipulation in API requests
+  - Prevent tenant_id and subject_id manipulation in API requests
   - Validate tenant membership for all operations
+  - Validate subject-level role assignments before allowing subject-specific operations
 
 ---
 
@@ -952,14 +979,23 @@ Headers:
     "user_id": "uuid",
     "username": "string",
     "email": "string",
-    "role": "student|tutor|tenant_admin|system_admin",
+    "role": "tenant_admin|system_admin",  // Only for tenant_admin and system_admin
     "tenant_id": "uuid",  // Null for system_admin
-    "grade_level": "integer",  // For students
+    "subject_roles": [  // Array of subject-level role assignments (for students and tutors)
+      {
+        "subject_id": "uuid",
+        "subject_code": "string",
+        "role": "student|tutor",
+        "status": "active"
+      }
+    ],
     "requires_password_change": "boolean",  // True for first-time login
     "account_status": "pending_activation|active|inactive|locked"
   }
 }
 ```
+
+**Note:** For tenant users (students and tutors), the `subject_roles` array contains all active subject-level role assignments. The `role` field at the user level is only present for tenant_admin and system_admin roles. The access token JWT should include subject roles in its claims for efficient authorization checks.
 
 **Error Responses:**
 - `401 Unauthorized`: Invalid credentials
@@ -1827,9 +1863,74 @@ POST /api/v1/admin/tutors
 }
 ```
 
-#### 3.9.4 Convert Account to Tutor
+#### 3.9.4 Assign Subject Role to User
 ```
-POST /api/v1/admin/accounts/{account_id}/assign-tutor-role
+POST /api/v1/admin/users/{user_id}/subjects/{subject_id}/role
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Request Body:**
+```json
+{
+  "role": "student|tutor",
+  "create_profile": "boolean"  // Optional: create subject-specific profile, default true
+}
+```
+
+**Response:**
+```json
+{
+  "assignment_id": "uuid",
+  "user_id": "uuid",
+  "subject_id": "uuid",
+  "role": "student|tutor",
+  "status": "active",
+  "assigned_at": "timestamp",
+  "message": "Role successfully assigned"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: User already has this role for the subject, or has the opposite role (cannot be both student and tutor)
+- `404 Not Found`: User or subject not found
+- `403 Forbidden`: User does not belong to tenant (for tenant admin)
+
+#### 3.9.5 Update Subject Role for User
+```
+PUT /api/v1/admin/users/{user_id}/subjects/{subject_id}/role
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Request Body:**
+```json
+{
+  "role": "student|tutor",
+  "status": "active|inactive"  // Optional: deactivate without removing
+}
+```
+
+**Response:**
+```json
+{
+  "assignment_id": "uuid",
+  "user_id": "uuid",
+  "subject_id": "uuid",
+  "role": "student|tutor",
+  "status": "active|inactive",
+  "updated_at": "timestamp",
+  "message": "Role successfully updated"
+}
+```
+
+**Note:** Changing a role (e.g., from student to tutor) replaces the previous role assignment for that subject. The old role assignment is removed and a new one is created.
+
+#### 3.9.6 Remove Subject Role from User
+```
+DELETE /api/v1/admin/users/{user_id}/subjects/{subject_id}/role
 ```
 
 **Headers:**
@@ -1838,10 +1939,76 @@ POST /api/v1/admin/accounts/{account_id}/assign-tutor-role
 **Response:**
 ```json
 {
-  "account_id": "uuid",
-  "tutor_id": "uuid",
-  "role": "tutor",
-  "message": "Account successfully assigned tutor role"
+  "assignment_id": "uuid",
+  "user_id": "uuid",
+  "subject_id": "uuid",
+  "status": "removed",
+  "removed_at": "timestamp",
+  "message": "Role assignment removed"
+}
+```
+
+#### 3.9.7 Get User's Subject Roles
+```
+GET /api/v1/admin/users/{user_id}/roles
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Query Parameters:**
+- `subject_id` (optional: filter by subject)
+- `role` (optional: filter by role - student or tutor)
+- `status` (optional: active, inactive, all)
+
+**Response:**
+```json
+{
+  "user_id": "uuid",
+  "roles": [
+    {
+      "assignment_id": "uuid",
+      "subject_id": "uuid",
+      "subject_code": "string",
+      "subject_name": "string",
+      "role": "student|tutor",
+      "status": "active|inactive",
+      "assigned_at": "timestamp",
+      "updated_at": "timestamp"
+    }
+  ],
+  "total": "integer"
+}
+```
+
+#### 3.9.8 Get Subject's Users by Role
+```
+GET /api/v1/admin/subjects/{subject_id}/users
+```
+
+**Headers:**
+- `Authorization: Bearer {admin_token}`
+
+**Query Parameters:**
+- `role` (optional: student, tutor, all)
+- `status` (optional: active, inactive, all)
+
+**Response:**
+```json
+{
+  "subject_id": "uuid",
+  "subject_code": "string",
+  "users": [
+    {
+      "user_id": "uuid",
+      "username": "string",
+      "email": "string",
+      "role": "student|tutor",
+      "status": "active|inactive",
+      "assigned_at": "timestamp"
+    }
+  ],
+  "total": "integer"
 }
 ```
 
@@ -1876,9 +2043,9 @@ GET /api/v1/tutors/{tutor_id}/students
 }
 ```
 
-#### 3.9.6 Get Student Progress (Tutor View)
+#### 3.9.11 Get Student Progress (Tutor View) for Subject
 ```
-GET /api/v1/tutors/{tutor_id}/students/{student_id}/progress
+GET /api/v1/tutors/{tutor_id}/subjects/{subject_id}/students/{student_id}/progress
 ```
 
 **Headers:**
@@ -1889,21 +2056,21 @@ GET /api/v1/tutors/{tutor_id}/students/{student_id}/progress
 {
   "student_id": "uuid",
   "student_name": "string",
-  "overall_stats": {
+  "subject_id": "uuid",
+  "subject_code": "string",
+  "subject_stats": {
     "total_questions": "integer",
     "correct_answers": "integer",
     "accuracy": "float",
     "average_score": "float"
-  },
-  "by_subject": {
-    "math": { /* stats */ },
-    "english": { /* stats */ }
   },
   "recent_sessions": ["array"],
   "weak_areas": ["array"],
   "strong_areas": ["array"]
 }
 ```
+
+**Note:** Returns progress for the specific subject. The tutor must have the tutor role for this subject, and the student must be assigned to this tutor for this subject.
 
 ### 3.11 Messaging Endpoints
 
@@ -2921,7 +3088,8 @@ GET /api/v1/system/audit-logs
   "submission_id": "uuid",
   "tenant_id": "uuid",  // Required: tenant context
   "question_id": "uuid",
-  "student_id": "uuid",  // Must belong to tenant_id
+  "student_id": "uuid",  // Foreign key to user_accounts.user_id (user must have student role for question's subject)
+  "subject_id": "uuid",  // Foreign key to subjects.subject_id (denormalized for quick access)
   "session_id": "uuid",
   "answer": "string|object",
   "is_correct": "boolean",
@@ -2933,6 +3101,8 @@ GET /api/v1/system/audit-logs
   "submitted_at": "timestamp"
 }
 ```
+
+**Note:** `student_id` references `user_accounts.user_id` for a user who has the student role for the question's subject (verified via `user_subject_roles`).
 
 ### 4.4 Hint
 ```json
@@ -2951,7 +3121,7 @@ GET /api/v1/system/audit-logs
 {
   "session_id": "uuid",
   "tenant_id": "uuid",  // Required: tenant context
-  "student_id": "uuid",  // Must belong to tenant_id
+  "student_id": "uuid",  // Foreign key to user_accounts.user_id (user must have student role for this subject)
   "subject_id": "uuid",  // Reference to subject
   "subject_code": "string",  // Denormalized for quick access
   "grade_level": "integer",  // Null if subject doesn't use grade levels
@@ -2966,41 +3136,40 @@ GET /api/v1/system/audit-logs
 }
 ```
 
+**Note:** `student_id` references `user_accounts.user_id` for a user who has the student role for this subject (verified via `user_subject_roles`). A user can only create quiz sessions for subjects where they have the student role.
+
 ### 4.6 Student Progress
 ```json
 {
-  "student_id": "uuid",
+  "student_id": "uuid",  // Foreign key to user_accounts.user_id
   "tenant_id": "uuid",  // Required: tenant context
   "subject_stats": {
-    "math": {
+    "subject_id": {
       "total_questions": "integer",
       "correct": "integer",
       "accuracy": "float",
       "average_score": "float",
       "topics": { /* topic-level stats */ }
-    },
-    "english": { /* similar structure */ },
-    "python": { /* similar structure */ }
+    }
   },
   "last_updated": "timestamp"
 }
 ```
 
-### 4.7 Student Account
+**Note:** `student_id` references `user_accounts.user_id`. Progress is tracked per subject. A user can have progress data for multiple subjects where they have the student role. Progress is only tracked for subjects where the user has an active student role assignment.
+
+### 4.7 User Account (Parent Table)
 ```json
 {
-  "student_id": "uuid",
-  "tenant_id": "uuid",  // Required: tenant membership
-  "username": "string",
-  "email": "string",
+  "user_id": "uuid",  // Primary key, used as foreign key in role-specific tables
+  "tenant_id": "uuid",  // Required: tenant membership (for student, tutor, tenant_admin)
+  "username": "string",  // Unique within tenant
+  "email": "string",  // Unique within tenant
   "password_hash": "string",  // Cryptographic hash, never plain text
-  "role": "student",  // User role
-  "grade_level": "integer",  // Optional
   "account_status": "pending_activation|active|inactive|locked",
   "requires_password_change": "boolean",
   "failed_login_attempts": "integer",
   "locked_until": "timestamp",  // Null if not locked
-  "assigned_tutor_id": "uuid",  // Optional: assigned tutor (must be same tenant)
   "created_at": "timestamp",
   "updated_at": "timestamp",
   "last_login": "timestamp",
@@ -3008,11 +3177,68 @@ GET /api/v1/system/audit-logs
 }
 ```
 
+**Note:** This parent table contains common authentication and account management fields for tenant-scoped accounts. Users can have different roles (student or tutor) for different subjects. Subject-level role assignments are managed through the `user_subject_roles` table (Section 4.7b). A user can be a student for some subjects and a tutor for other subjects simultaneously, but cannot be both student and tutor for the same subject.
+
+### 4.7a User Subject Role Assignment
+```json
+{
+  "assignment_id": "uuid",  // Primary key
+  "user_id": "uuid",  // Foreign key to user_accounts.user_id
+  "tenant_id": "uuid",  // Denormalized from user_accounts for convenience
+  "subject_id": "uuid",  // Foreign key to subjects.subject_id
+  "role": "student|tutor",  // Role for this specific subject
+  "status": "active|inactive",  // Can be deactivated without deleting
+  "assigned_at": "timestamp",
+  "assigned_by": "uuid",  // Tenant admin or system admin user ID
+  "updated_at": "timestamp",
+  "updated_by": "uuid",  // Tenant admin or system admin user ID
+  "notes": "string"  // Optional: assignment notes
+}
+```
+
+**Note:** This table manages subject-level role assignments. A user can have multiple entries (one per subject) with different roles. The constraint ensures a user cannot be both student and tutor for the same subject. Tenant admins can change a user's role for a subject at any time by updating or creating a new assignment.
+
+### 4.7b Student Subject Profile
+```json
+{
+  "profile_id": "uuid",  // Primary key
+  "user_id": "uuid",  // Foreign key to user_accounts.user_id
+  "subject_id": "uuid",  // Foreign key to subjects.subject_id
+  "tenant_id": "uuid",  // Denormalized from user_accounts for convenience
+  "grade_level": "integer",  // Optional: grade level for this subject
+  "assigned_tutor_id": "uuid",  // Optional: assigned tutor for this subject (must be same tenant and have tutor role for this subject)
+  "created_at": "timestamp",
+  "updated_at": "timestamp"
+}
+```
+
+**Note:** Student-specific data for each subject. A user can have multiple student profiles (one per subject where they are a student). The `assigned_tutor_id` references a user who has the tutor role for the same subject.
+
+### 4.7c Tutor Subject Profile
+```json
+{
+  "profile_id": "uuid",  // Primary key
+  "user_id": "uuid",  // Foreign key to user_accounts.user_id
+  "subject_id": "uuid",  // Foreign key to subjects.subject_id
+  "tenant_id": "uuid",  // Denormalized from user_accounts for convenience
+  "name": "string",  // Optional: subject-specific tutor name/alias
+  "profile": {
+    "bio": "string",  // Optional: subject-specific bio
+    "specializations": ["array"],  // Optional: subject-specific specializations
+    "qualifications": ["array"]  // Optional: subject-specific qualifications
+  },
+  "created_at": "timestamp",
+  "updated_at": "timestamp"
+}
+```
+
+**Note:** Tutor-specific data for each subject. A user can have multiple tutor profiles (one per subject where they are a tutor). This allows tutors to have different profiles, specializations, and qualifications for different subjects.
+
 ### 4.8 Password Reset OTP
 ```json
 {
   "otp_id": "uuid",
-  "student_id": "uuid",
+  "user_id": "uuid",  // Foreign key to user_accounts.user_id (for student, tutor, tenant_admin)
   "email": "string",
   "otp_code": "string",  // Hashed OTP
   "expires_at": "timestamp",
@@ -3022,18 +3248,23 @@ GET /api/v1/system/audit-logs
 }
 ```
 
+**Note:** OTP applies to all tenant-scoped accounts (student, tutor, tenant_admin) via the parent `user_accounts` table. System admins use a separate OTP mechanism if needed.
+
 ### 4.9 Authentication Token
 ```json
 {
   "token_id": "uuid",
-  "student_id": "uuid",
-  "access_token": "string",  // JWT or similar
+  "user_id": "uuid",  // Foreign key to user_accounts.user_id (for student, tutor, tenant_admin) or system_admin_accounts.admin_id (for system_admin)
+  "user_type": "tenant_user|system_admin",  // Distinguishes between tenant-scoped users and system admins
+  "access_token": "string",  // JWT or similar (includes subject roles in claims)
   "refresh_token": "string",  // Optional
   "expires_at": "timestamp",
   "created_at": "timestamp",
   "revoked": "boolean"
 }
 ```
+
+**Note:** Authentication tokens can reference either tenant-scoped users (via `user_accounts.user_id`) or system admins (via `system_admin_accounts.admin_id`). The `user_type` field indicates which table to reference. For tenant users, the JWT access token should include the user's subject-level role assignments to enable subject-specific authorization checks.
 
 ### 4.10 Subject
 ```json
@@ -3121,16 +3352,18 @@ GET /api/v1/system/audit-logs
   "registration_id": "uuid",
   "competition_id": "uuid",
   "tenant_id": "uuid",  // Required: tenant context
-  "student_id": "uuid",  // Must belong to tenant_id
+  "student_id": "uuid",  // Foreign key to student_accounts.student_id (which equals user_accounts.user_id)
   "status": "registered|confirmed|cancelled",
   "registered_at": "timestamp",
   "confirmed_at": "timestamp",
   "cancelled_at": "timestamp",
-  "cancelled_by": "uuid",  // Student ID if self-cancelled, Admin ID if admin-cancelled
+  "cancelled_by": "uuid",  // Student ID if self-cancelled, Admin ID (user_id or admin_id) if admin-cancelled
   "waitlist_position": "integer",  // If max participants reached
   "notes": "string"  // Optional
 }
 ```
+
+**Note:** `student_id` references `user_accounts.user_id` for a user who has the student role for the competition's subject (via `user_subject_roles`).
 
 ### 4.11b Competition Session
 ```json
@@ -3138,7 +3371,7 @@ GET /api/v1/system/audit-logs
   "competition_session_id": "uuid",
   "competition_id": "uuid",
   "tenant_id": "uuid",  // Required: tenant context
-  "student_id": "uuid",  // Must belong to tenant_id
+  "student_id": "uuid",  // Foreign key to user_accounts.user_id (user must have student role for competition's subject)
   "session_id": "uuid",  // Reference to quiz session
   "started_at": "timestamp",
   "completed_at": "timestamp",
@@ -3152,78 +3385,75 @@ GET /api/v1/system/audit-logs
 }
 ```
 
-### 4.12 Tutor Account
+**Note:** `student_id` references `user_accounts.user_id` for a user who has the student role for the competition's subject (via `user_subject_roles`).
+
+**Note:** The old single Tutor Account table has been replaced with subject-level `tutor_subject_profiles` (Section 4.7c) and `user_subject_roles` (Section 4.7a) to support users being tutors for specific subjects. A user can be a tutor for multiple subjects simultaneously.
+
+### 4.13 Tenant Administrator Account
 ```json
 {
-  "tutor_id": "uuid",
-  "tenant_id": "uuid",  // Required: tenant membership
-  "username": "string",
-  "email": "string",
-  "password_hash": "string",  // Cryptographic hash
+  "tenant_admin_id": "uuid",  // Primary key, also foreign key to user_accounts.user_id
+  "user_id": "uuid",  // Foreign key to user_accounts.user_id (one-to-one relationship)
+  "tenant_id": "uuid",  // Denormalized from user_accounts for convenience
   "name": "string",
-  "status": "active|inactive|suspended|pending_activation",
-  "requires_password_change": "boolean",
-  "profile": {
-    "bio": "string",
-    "specializations": ["array"],
-    "contact_info": "object",
-    "qualifications": ["array"]
-  },
-  "failed_login_attempts": "integer",
-  "locked_until": "timestamp",
+  "permissions": ["array"],  // Optional: specific permissions
   "created_at": "timestamp",
-  "updated_at": "timestamp",
-  "last_login": "timestamp",
-  "created_by": "uuid"  // Tenant admin or system admin user ID
+  "updated_at": "timestamp"
 }
 ```
 
-### 4.13 Administrator Account
+**Note:** Tenant administrator-specific data extends the parent `user_accounts` table. The `user_id` in this table is the same as `tenant_admin_id` and references `user_accounts.user_id`. Authentication and account management fields are in the parent table.
+
+### 4.13a System Administrator Account
 ```json
 {
-  "admin_id": "uuid",
-  "tenant_id": "uuid",  // Null for system_admin, required for tenant_admin
-  "username": "string",
-  "email": "string",
-  "password_hash": "string",  // Cryptographic hash
+  "admin_id": "uuid",  // Primary key (separate from user_accounts)
+  "username": "string",  // Unique across all system admins
+  "email": "string",  // Unique across all system admins
+  "password_hash": "string",  // Cryptographic hash, never plain text
   "name": "string",
-  "role": "tenant_admin|system_admin",
-  "status": "active|inactive|suspended|pending_activation",
+  "role": "system_admin",  // Always system_admin
+  "account_status": "active|inactive|suspended|pending_activation",
   "requires_password_change": "boolean",
   "permissions": ["array"],  // Optional: specific permissions
   "failed_login_attempts": "integer",
-  "locked_until": "timestamp",
+  "locked_until": "timestamp",  // Null if not locked
   "created_at": "timestamp",
   "updated_at": "timestamp",
   "last_login": "timestamp",
-  "created_by": "uuid"  // System admin user ID (for tenant_admin) or super admin (for system_admin)
+  "created_by": "uuid"  // System admin user ID (for creating other system admins)
 }
 ```
+
+**Note:** System administrators are stored in a separate table and are not tenant-scoped. They have full system-wide access and do not belong to any tenant.
 
 ### 4.14 Student-Tutor Assignment
 ```json
 {
   "assignment_id": "uuid",
   "tenant_id": "uuid",  // Required: tenant context
-  "student_id": "uuid",  // Must belong to tenant_id
-  "tutor_id": "uuid",  // Must belong to tenant_id
+  "subject_id": "uuid",  // Foreign key to subjects.subject_id (assignment is subject-specific)
+  "student_id": "uuid",  // Foreign key to user_accounts.user_id (user must have student role for this subject)
+  "tutor_id": "uuid",  // Foreign key to user_accounts.user_id (user must have tutor role for this subject)
   "status": "active|inactive",
   "assigned_at": "timestamp",
-  "assigned_by": "uuid",  // Tenant admin or system admin user ID
+  "assigned_by": "uuid",  // Foreign key to user_accounts.user_id (tenant_admin) or system_admin_accounts.admin_id (system_admin)
   "deactivated_at": "timestamp",
   "deactivated_by": "uuid",  // Optional: admin user ID
   "notes": "string"  // Optional: assignment notes
 }
 ```
 
+**Note:** Student-tutor assignments are subject-specific. Both `student_id` and `tutor_id` reference `user_accounts.user_id`, but the users must have the appropriate roles (student and tutor respectively) for the specified subject via `user_subject_roles`. A student can have different tutors for different subjects. The `assigned_by` field can reference either a tenant admin (via `user_accounts.user_id`) or a system admin (via `system_admin_accounts.admin_id`).
+
 ### 4.15 Message
 ```json
 {
   "message_id": "uuid",
   "tenant_id": "uuid",  // Required: tenant context
-  "sender_id": "uuid",  // Must belong to tenant_id
+  "sender_id": "uuid",  // Foreign key to user_accounts.user_id (for student, tutor, tenant_admin)
   "sender_role": "student|tutor|tenant_admin",
-  "recipient_id": "uuid",  // Must belong to tenant_id
+  "recipient_id": "uuid",  // Foreign key to user_accounts.user_id (for student, tutor, tenant_admin)
   "recipient_role": "student|tutor|tenant_admin",
   "content": "string",
   "status": "sent|delivered|read|deleted",
@@ -3239,13 +3469,15 @@ GET /api/v1/system/audit-logs
 }
 ```
 
+**Note:** Messages are between tenant-scoped users only (students, tutors, tenant admins). System admins do not participate in the messaging system. Both `sender_id` and `recipient_id` reference `user_accounts.user_id`.
+
 ### 4.16 Audit Log
 ```json
 {
   "log_id": "uuid",
   "tenant_id": "uuid",  // Null for system-level actions
   "action": "string",  // create_account, disable_account, assign_tutor, etc.
-  "performed_by": "uuid",  // User ID who performed action
+  "performed_by": "uuid",  // Foreign key to user_accounts.user_id (tenant_admin) or system_admin_accounts.admin_id (system_admin)
   "performed_by_role": "tenant_admin|system_admin",
   "target_type": "account|subject|assignment|message|tenant",
   "target_id": "uuid",
@@ -3255,6 +3487,8 @@ GET /api/v1/system/audit-logs
   "timestamp": "timestamp"
 }
 ```
+
+**Note:** The `performed_by` field can reference either a tenant admin (via `user_accounts.user_id`) or a system admin (via `system_admin_accounts.admin_id`). The `performed_by_role` field indicates which table to reference.
 
 ---
 
@@ -3603,7 +3837,7 @@ GET /api/v1/system/audit-logs
 ---
 
 ## Document Version
-- **Version**: 1.6
+- **Version**: 1.8
 - **Date**: 2025
 - **Author**: Requirements Team
 - **Status**: Draft
@@ -3614,4 +3848,6 @@ GET /api/v1/system/audit-logs
   - v1.4: Added Tenant Management requirements (Section 2.12), updated Role-Based Access Control (Section 2.13) to include tenant_admin role, added Tenant Management endpoints (Section 3.11), separated System Administrator endpoints (Section 3.12) and Tenant Administrator endpoints (Section 3.13), added Tenant data model (Section 4.1), updated all data models to include tenant_id for multi-tenancy support, updated authentication response to include tenant_id, added tenant isolation security requirements (NFR-4.15), and renumbered subsequent data model sections.
   - v1.5: Added domain-based tenant identification (Section 2.12.3), updated Tenant Management to include domain requirements (Section 2.12.2), added domain management endpoints (Sections 3.11.7-3.11.10), added domain resolution endpoint, updated Tenant data model to include domains (Section 4.1), added Tenant Domain data model (Section 4.1a), updated login endpoint to accept domain parameter, added domain-based tenant resolution security requirements (NFR-4.16), and added domain resolution architecture constraints (Section 7.5).
   - v1.6: Added Competition Management requirements (Section 2.9), Competition Endpoints (Section 3.9), Competition data models (Sections 4.11, 4.11a, 4.11b), renumbered subsequent sections (Tutor Management to 2.10, Messaging to 2.11, Administrator to 2.12, Tenant to 2.13, RBAC to 2.14), and renumbered API endpoint sections accordingly.
+  - v1.7: Refactored account data models to use parent table pattern. Added User Account parent table (Section 4.7) containing common authentication and account management fields for tenant-scoped accounts (student, tutor, tenant_admin). Updated Student Account (Section 4.7a), Tutor Account (Section 4.12), and Tenant Administrator Account (Section 4.13) to reference parent table via user_id foreign key. Created separate System Administrator Account table (Section 4.13a) for system-wide admins (not tenant-scoped). Updated Password Reset OTP model (Section 4.8) to use user_id instead of student_id. Updated Authentication Token model (Section 4.9) to support both tenant-scoped users (via user_accounts) and system admins (via system_admin_accounts) with user_type field. Updated Message model (Section 4.15) to clarify that sender_id and recipient_id reference user_accounts.user_id.
+  - v1.8: Implemented subject-level role assignments. Removed single role field from User Account table. Added User Subject Role Assignment table (Section 4.7a) to manage subject-specific roles (student or tutor per subject). Added Student Subject Profile (Section 4.7b) and Tutor Subject Profile (Section 4.7c) tables for subject-specific data. Updated functional requirements (Section 2.10) to support users being students for some subjects and tutors for other subjects simultaneously, with role changes managed by tenant admins. Updated access control (Section 2.14) to enforce subject-level role checks. Added API endpoints (Section 3.9.4-3.9.8) for managing subject-level role assignments. Updated authentication response (Section 3.6.1) to include subject_roles array. Updated all data models referencing student_id/tutor_id to clarify subject-level role requirements. Updated Student-Tutor Assignment (Section 4.14) to be subject-specific.
 
