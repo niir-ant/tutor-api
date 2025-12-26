@@ -21,6 +21,13 @@ except ImportError:
     # python-dotenv not installed, skip
     # User should set DATABASE_URL as system environment variable
     pass
+except PermissionError:
+    # Permission denied - likely sandbox restriction or file permissions
+    # Fall back to system environment variables
+    pass
+except Exception:
+    # Other errors - fall back to system environment variables
+    pass
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

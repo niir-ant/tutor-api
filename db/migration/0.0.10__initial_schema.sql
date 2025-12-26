@@ -158,8 +158,8 @@ CREATE TABLE administrator_accounts (
 -- Add foreign key for assigned_tutor_id in student_accounts
 ALTER TABLE student_accounts 
     ADD CONSTRAINT student_accounts_assigned_tutor_fk 
-    FOREIGN KEY (assigned_tutor_id, tenant_id) 
-    REFERENCES tutor_accounts(tutor_id, tenant_id) 
+    FOREIGN KEY (assigned_tutor_id) 
+    REFERENCES tutor_accounts(tutor_id) 
     ON DELETE SET NULL;
 
 -- ============================================================================
