@@ -19,7 +19,7 @@ CREATE TYPE session_status AS ENUM ('in_progress', 'completed', 'expired', 'aban
 CREATE TYPE competition_status AS ENUM ('upcoming', 'active', 'ended', 'cancelled');
 CREATE TYPE registration_status AS ENUM ('registered', 'confirmed', 'cancelled');
 CREATE TYPE message_status AS ENUM ('sent', 'delivered', 'read', 'deleted');
-CREATE TYPE user_role AS ENUM ('student', 'tutor', 'tenant_admin', 'system_admin', 'super_admin');
+CREATE TYPE user_role AS ENUM ('student', 'tutor', 'tenant_admin', 'system_admin');
 CREATE TYPE assignment_status AS ENUM ('active', 'inactive');
 CREATE TYPE competition_session_status AS ENUM ('in_progress', 'completed', 'expired', 'abandoned');
 CREATE TYPE visibility_type AS ENUM ('public', 'private', 'tenant_specific');
@@ -148,10 +148,10 @@ CREATE TABLE administrator_accounts (
     created_by UUID,
     CONSTRAINT administrator_accounts_username_unique UNIQUE (username),
     CONSTRAINT administrator_accounts_email_unique UNIQUE (email),
-    CONSTRAINT administrator_accounts_role_check CHECK (role IN ('tenant_admin', 'system_admin', 'super_admin')),
+    CONSTRAINT administrator_accounts_role_check CHECK (role IN ('tenant_admin', 'system_admin')),
     CONSTRAINT administrator_accounts_tenant_check CHECK (
         (role = 'system_admin' AND tenant_id IS NULL) OR
-        (role IN ('tenant_admin', 'super_admin') AND tenant_id IS NOT NULL)
+        (role = 'tenant_admin' AND tenant_id IS NOT NULL)
     )
 );
 
@@ -411,7 +411,7 @@ CREATE TABLE audit_logs (
     ip_address VARCHAR(45),
     user_agent TEXT,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT audit_logs_performed_by_role_check CHECK (performed_by_role IN ('tenant_admin', 'system_admin', 'super_admin'))
+    CONSTRAINT audit_logs_performed_by_role_check CHECK (performed_by_role IN ('tenant_admin', 'system_admin'))
 );
 
 -- ============================================================================
@@ -499,7 +499,7 @@ COMMENT ON COLUMN administrator_accounts.username IS 'Unique username (globally 
 COMMENT ON COLUMN administrator_accounts.email IS 'Unique email address (globally unique)';
 COMMENT ON COLUMN administrator_accounts.password_hash IS 'Cryptographically hashed password (bcrypt/Argon2) - never store plain text';
 COMMENT ON COLUMN administrator_accounts.name IS 'Full name of the administrator';
-COMMENT ON COLUMN administrator_accounts.role IS 'Administrator role: tenant_admin, system_admin, or super_admin';
+COMMENT ON COLUMN administrator_accounts.role IS 'Administrator role: tenant_admin or system_admin';
 COMMENT ON COLUMN administrator_accounts.status IS 'Current status: pending_activation, active, inactive, suspended, or locked';
 COMMENT ON COLUMN administrator_accounts.requires_password_change IS 'Whether the admin must change password on next login (true for preset accounts)';
 COMMENT ON COLUMN administrator_accounts.permissions IS 'Array of specific permissions (optional, for fine-grained access control)';
@@ -682,7 +682,7 @@ COMMENT ON COLUMN audit_logs.log_id IS 'Unique identifier for the audit log entr
 COMMENT ON COLUMN audit_logs.tenant_id IS 'Reference to the tenant (NULL for system-level actions)';
 COMMENT ON COLUMN audit_logs.action IS 'Action performed (e.g., create_account, disable_account, assign_tutor)';
 COMMENT ON COLUMN audit_logs.performed_by IS 'UUID of the user who performed the action';
-COMMENT ON COLUMN audit_logs.performed_by_role IS 'Role of the user who performed the action (tenant_admin, system_admin, or super_admin)';
+COMMENT ON COLUMN audit_logs.performed_by_role IS 'Role of the user who performed the action (tenant_admin or system_admin)';
 COMMENT ON COLUMN audit_logs.target_type IS 'Type of target entity (account, subject, assignment, message, tenant, etc.)';
 COMMENT ON COLUMN audit_logs.target_id IS 'UUID of the target entity that was acted upon';
 COMMENT ON COLUMN audit_logs.details IS 'JSON object containing action-specific details';

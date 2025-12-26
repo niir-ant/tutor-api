@@ -2353,7 +2353,7 @@ POST /api/v1/system/admins
 ```
 
 **Headers:**
-- `Authorization: Bearer {super_admin_token}`
+- `Authorization: Bearer {system_admin_token}`
 
 **Request Body:**
 ```json
@@ -2361,7 +2361,7 @@ POST /api/v1/system/admins
   "username": "string",
   "email": "string",
   "name": "string",
-  "role": "admin|super_admin",
+  "role": "system_admin",
   "permissions": ["array"]  // Optional: specific permissions
 }
 ```
@@ -3187,7 +3187,7 @@ GET /api/v1/system/audit-logs
   "email": "string",
   "password_hash": "string",  // Cryptographic hash
   "name": "string",
-  "role": "tenant_admin|system_admin|super_admin",
+  "role": "tenant_admin|system_admin",
   "status": "active|inactive|suspended|pending_activation",
   "requires_password_change": "boolean",
   "permissions": ["array"],  // Optional: specific permissions
@@ -3246,7 +3246,7 @@ GET /api/v1/system/audit-logs
   "tenant_id": "uuid",  // Null for system-level actions
   "action": "string",  // create_account, disable_account, assign_tutor, etc.
   "performed_by": "uuid",  // User ID who performed action
-  "performed_by_role": "tenant_admin|system_admin|super_admin",
+  "performed_by_role": "tenant_admin|system_admin",
   "target_type": "account|subject|assignment|message|tenant",
   "target_id": "uuid",
   "details": "object",  // Action-specific details

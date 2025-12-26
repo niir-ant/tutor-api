@@ -3374,7 +3374,7 @@ components:
           type: string
         role:
           type: string
-          enum: [tenant_admin, system_admin, super_admin]
+          enum: [tenant_admin, system_admin]
         status:
           type: string
           example: pending_activation

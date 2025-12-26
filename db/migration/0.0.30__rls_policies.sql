@@ -64,7 +64,7 @@ $$ LANGUAGE plpgsql STABLE;
 -- Function to check if user is system admin
 CREATE OR REPLACE FUNCTION is_system_admin() RETURNS BOOLEAN AS $$
 BEGIN
-    RETURN current_user_role() IN ('system_admin', 'super_admin');
+    RETURN current_user_role() = 'system_admin';
 END;
 $$ LANGUAGE plpgsql STABLE;
 

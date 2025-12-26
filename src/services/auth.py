@@ -70,6 +70,12 @@ class AuthService:
         if user.account_status.value not in ["active", "pending_activation"]:
             return None
         
+        # Get actual role for admin accounts
+        if user_type == "admin":
+            actual_role = user.role.value  # Get the actual role: tenant_admin, system_admin, etc.
+        else:
+            actual_role = user_type  # student or tutor
+        
         # Return user info
         return {
             "user_id": user.student_id if user_type == "student" else (
@@ -77,8 +83,8 @@ class AuthService:
             ),
             "username": user.username,
             "email": user.email,
-            "role": user_type,
-            "tenant_id": tenant_id if user_type != "admin" or hasattr(user, "tenant_id") else None,
+            "role": actual_role,  # Use actual role instead of generic user_type
+            "tenant_id": user.tenant_id if user_type == "admin" else tenant_id,
             "grade_level": getattr(user, "grade_level", None),
             "requires_password_change": user.requires_password_change,
             "account_status": user.account_status.value,
