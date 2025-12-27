@@ -69,13 +69,28 @@ src/
 
 ## Getting Started
 
-### 1. Install Dependencies
+### 1. Set Up Virtual Environment
+
+Create and activate a virtual environment:
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+# venv\Scripts\activate
+```
+
+### 2. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+### 3. Configure Environment
 
 Copy `env.example` to `.env` and configure:
 
@@ -84,13 +99,13 @@ DATABASE_URL=postgresql://user:password@localhost:5432/tutor
 JWT_SECRET_KEY=your-secret-key-here
 ```
 
-### 3. Run Database Migrations
+### 4. Run Database Migrations
 
 ```bash
 alembic upgrade head
 ```
 
-### 4. Run the Application
+### 5. Run the Application
 
 ```bash
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000

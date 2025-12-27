@@ -11,7 +11,7 @@ from src.models.database import (
     SystemAdminAccount, QuizSession, UserSubjectRole
 )
 from src.core.exceptions import NotFoundError, BadRequestError
-from src.models.user import TenantStatus, DomainStatus, UserRole, AssignmentStatus
+from src.models.user import TenantStatus, DomainStatus, UserRole, AssignmentStatus, AccountStatus
 
 
 class TenantService:
@@ -484,6 +484,14 @@ class TenantService:
             QuizSession.tenant_id == tenant_id
         ).scalar() or 0
         
+        # Count active accounts (UserAccount records with ACTIVE status)
+        active_accounts_count = self.db.query(func.count(UserAccount.user_id)).filter(
+            and_(
+                UserAccount.tenant_id == tenant_id,
+                UserAccount.account_status == AccountStatus.ACTIVE
+            )
+        ).scalar() or 0
+        
         return {
             "tenant_id": str(tenant_id),
             "tenant_code": tenant.tenant_code,
@@ -492,7 +500,7 @@ class TenantService:
                 "total_students": student_count,
                 "total_tutors": tutor_count,
                 "total_tenant_admins": admin_count,
-                "active_accounts": 0,  # TODO: Calculate
+                "active_accounts": active_accounts_count,
             },
             "activity": {
                 "total_sessions": session_count,
