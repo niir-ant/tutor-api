@@ -77,7 +77,7 @@ class SubjectService:
             "supported_question_types": subject.supported_question_types,
             "answer_validation_method": subject.answer_validation_method,
             "settings": subject.settings,
-            "metadata": subject.metadata,
+            "metadata": subject.extra_metadata,
             "created_at": subject.created_at,
             "updated_at": subject.updated_at,
         }
@@ -155,7 +155,7 @@ class SubjectService:
         if settings is not None:
             subject.settings = settings
         if metadata is not None:
-            subject.metadata = metadata
+            subject.extra_metadata = metadata
         
         self.db.commit()
         self.db.refresh(subject)

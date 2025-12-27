@@ -85,9 +85,9 @@ class QuestionService:
             "options": question.options,
             "metadata": {
                 "difficulty": question.difficulty.value if hasattr(question.difficulty, 'value') else question.difficulty,
-                "estimated_time": question.metadata.get("estimated_time") if question.metadata else None,
-                "learning_objectives": question.metadata.get("learning_objectives", []) if question.metadata else [],
-                "topic": question.metadata.get("topic") if question.metadata else None,
+                "estimated_time": question.extra_metadata.get("estimated_time") if question.extra_metadata else None,
+                "learning_objectives": question.extra_metadata.get("learning_objectives", []) if question.extra_metadata else [],
+                "topic": question.extra_metadata.get("topic") if question.extra_metadata else None,
             },
             "session_id": session_id,
         }
@@ -109,7 +109,7 @@ class QuestionService:
             "question_text": question.question_text,
             "question_type": question.question_type,
             "options": question.options,
-            "metadata": question.metadata or {},
+            "metadata": question.extra_metadata or {},
         }
     
     def get_question_narrative(self, question_id: UUID, tenant_id: Optional[UUID] = None) -> Dict[str, Any]:

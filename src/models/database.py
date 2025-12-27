@@ -78,7 +78,7 @@ class Subject(Base):
     supported_question_types = Column(ARRAY(String), nullable=False)  # Array of question type strings
     answer_validation_method = Column(SQLEnum(ValidationMethod, native_enum=True, create_type=False), nullable=False)
     settings = Column(JSONB)
-    metadata = Column(JSONB)
+    extra_metadata = Column("metadata", JSONB)  # Use 'metadata' as DB column name, 'extra_metadata' as Python attr
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = Column(UUID(as_uuid=True))
@@ -254,7 +254,7 @@ class Question(Base):
     question_text = Column(Text, nullable=False)
     options = Column(JSONB)
     correct_answer = Column(JSONB, nullable=False)
-    metadata = Column(JSONB)
+    extra_metadata = Column("metadata", JSONB)  # Use 'metadata' as DB column name, 'extra_metadata' as Python attr
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     ai_model_version = Column(String(50))
 
