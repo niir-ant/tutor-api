@@ -106,3 +106,21 @@ class AuthStatusResponse(BaseModel):
     requires_password_change: bool = False
     user: Optional[UserInfo] = None
 
+
+class UpdateAccountRequest(BaseModel):
+    """Update account request (system admin)"""
+    username: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
+
+
+class ResetPasswordRequestAdmin(BaseModel):
+    """Reset password request (admin-initiated)"""
+    send_email: bool = False  # If True, send email with new password; if False, return password in response
+
+
+class ResetPasswordResponseAdmin(BaseModel):
+    """Reset password response (admin-initiated)"""
+    message: str
+    temporary_password: Optional[str] = None  # Only included if send_email is False
+

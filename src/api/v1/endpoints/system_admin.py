@@ -1,7 +1,7 @@
 """
 System Admin endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from uuid import UUID
@@ -28,6 +28,8 @@ from src.models.database import (
 )
 from src.core.security import get_password_hash
 from src.models.user import UserRole, AccountStatus, AssignmentStatus
+from src.schemas.auth import UpdateAccountRequest, ResetPasswordRequestAdmin, ResetPasswordResponseAdmin
+from src.services.auth import AuthService
 
 router = APIRouter()
 
@@ -399,15 +401,167 @@ async def get_account_details(
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
 
 
-@router.put("/accounts/{account_id}/status", status_code=status.HTTP_200_OK)
-async def update_account_status(
+@router.put("/accounts/{account_id}", status_code=status.HTTP_200_OK)
+async def update_account(
     account_id: UUID,
-    status: str,
-    reason: Optional[str] = None,
+    request: UpdateAccountRequest,
     current_user: dict = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ):
-    """Update account status (system admin only)"""
+    """Update account details (system admin only)"""
+    # Try to find account in UserAccount (tenant-scoped users)
+    user = db.query(UserAccount).filter(UserAccount.user_id == account_id).first()
+    user_type = "tenant_user"
+    
+    if not user:
+        # Try SystemAdminAccount
+        admin = db.query(SystemAdminAccount).filter(SystemAdminAccount.admin_id == account_id).first()
+        if not admin:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+        user_type = "system_admin"
+        
+        # Update system admin account
+        if request.username:
+            # Check if username already exists
+            existing = db.query(SystemAdminAccount).filter(
+                and_(
+                    SystemAdminAccount.username == request.username,
+                    SystemAdminAccount.admin_id != account_id
+                )
+            ).first()
+            if existing:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists")
+            admin.username = request.username
+        
+        if request.email:
+            # Check if email already exists
+            existing = db.query(SystemAdminAccount).filter(
+                and_(
+                    SystemAdminAccount.email == request.email,
+                    SystemAdminAccount.admin_id != account_id
+                )
+            ).first()
+            if existing:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
+            admin.email = request.email
+        
+        if request.name:
+            admin.name = request.name
+        
+        db.commit()
+        db.refresh(admin)
+        
+        return {
+            "account_id": str(account_id),
+            "username": admin.username,
+            "email": admin.email,
+            "name": admin.name,
+            "updated_at": admin.updated_at,
+        }
+    
+    # Update tenant-scoped user account
+    if request.username:
+        # Check if username already exists in the same tenant
+        existing = db.query(UserAccount).filter(
+            and_(
+                UserAccount.username == request.username,
+                UserAccount.user_id != account_id,
+                UserAccount.tenant_id == user.tenant_id
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists in this tenant")
+        user.username = request.username
+    
+    if request.email:
+        # Check if email already exists in the same tenant
+        existing = db.query(UserAccount).filter(
+            and_(
+                UserAccount.email == request.email,
+                UserAccount.user_id != account_id,
+                UserAccount.tenant_id == user.tenant_id
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists in this tenant")
+        user.email = request.email
+    
+    # Update name if it's a tenant admin
+    if request.name:
+        tenant_admin = db.query(TenantAdminAccount).filter(
+            TenantAdminAccount.user_id == user.user_id
+        ).first()
+        if tenant_admin:
+            tenant_admin.name = request.name
+    
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "account_id": str(account_id),
+        "username": user.username,
+        "email": user.email,
+        "updated_at": user.updated_at,
+    }
+
+
+@router.post("/accounts/{account_id}/reset-password", response_model=ResetPasswordResponseAdmin, status_code=status.HTTP_200_OK)
+async def reset_account_password(
+    account_id: UUID,
+    request: ResetPasswordRequestAdmin,
+    current_user: dict = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+):
+    """Reset account password (system admin only)"""
+    import secrets
+    
+    # Try to find account in UserAccount (tenant-scoped users)
+    user = db.query(UserAccount).filter(UserAccount.user_id == account_id).first()
+    user_type = "tenant_user"
+    
+    if not user:
+        # Try SystemAdminAccount
+        admin = db.query(SystemAdminAccount).filter(SystemAdminAccount.admin_id == account_id).first()
+        if not admin:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+        user_type = "system_admin"
+        user_id = admin.admin_id
+        email = admin.email
+    else:
+        user_id = user.user_id
+        email = user.email
+    
+    # Generate temporary password
+    temp_password = secrets.token_urlsafe(12)
+    password_hash = get_password_hash(temp_password)
+    
+    # Update password
+    if user_type == "system_admin":
+        admin.password_hash = password_hash
+        admin.requires_password_change = True
+        db.commit()
+    else:
+        user.password_hash = password_hash
+        user.requires_password_change = True
+        db.commit()
+    
+    # TODO: Send email if send_email is True
+    # For now, always return password
+    return ResetPasswordResponseAdmin(
+        message="Password reset successfully. User will be required to change password on next login.",
+        temporary_password=temp_password if not request.send_email else None
+    )
+
+
+@router.put("/accounts/{account_id}/status", status_code=status.HTTP_200_OK)
+async def update_account_status(
+    account_id: UUID,
+    status: str = Body(...),
+    reason: Optional[str] = Body(None),
+    current_user: dict = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+):
+    """Update account status (system admin only) - can be used for soft delete by setting status to 'inactive' or 'suspended'"""
     # Try to find account in UserAccount (tenant-scoped users)
     account = db.query(UserAccount).filter(UserAccount.user_id == account_id).first()
     if account:
