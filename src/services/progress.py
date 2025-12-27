@@ -1,12 +1,14 @@
 """
-Progress service
+Progress service - updated for new model structure
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, func
 from typing import Optional, Dict, Any
 from uuid import UUID
-from sqlalchemy import func, Integer
 
-from src.models.database import StudentProgress, AnswerSubmission, QuizSession, StudentAccount
+from src.models.database import (
+    StudentProgress, AnswerSubmission, QuizSession, UserAccount
+)
 from src.core.exceptions import NotFoundError
 
 
@@ -26,9 +28,11 @@ class ProgressService:
     ) -> Dict[str, Any]:
         """Get student progress"""
         # Validate student
-        student = self.db.query(StudentAccount).filter(
-            StudentAccount.student_id == student_id,
-            StudentAccount.tenant_id == tenant_id,
+        student = self.db.query(UserAccount).filter(
+            and_(
+                UserAccount.user_id == student_id,
+                UserAccount.tenant_id == tenant_id
+            )
         ).first()
         
         if not student:
@@ -36,8 +40,10 @@ class ProgressService:
         
         # Get or create progress record
         progress = self.db.query(StudentProgress).filter(
-            StudentProgress.student_id == student_id,
-            StudentProgress.tenant_id == tenant_id,
+            and_(
+                StudentProgress.student_id == student_id,
+                StudentProgress.tenant_id == tenant_id
+            )
         ).first()
         
         if not progress:
@@ -52,11 +58,13 @@ class ProgressService:
         # Calculate overall stats from answer submissions
         query = self.db.query(
             func.count(AnswerSubmission.submission_id).label("total"),
-            func.sum(func.cast(AnswerSubmission.is_correct, Integer)).label("correct"),
+            func.sum(func.cast(AnswerSubmission.is_correct, func.Integer)).label("correct"),
             func.avg(AnswerSubmission.score).label("avg_score"),
         ).filter(
-            AnswerSubmission.student_id == student_id,
-            AnswerSubmission.tenant_id == tenant_id,
+            and_(
+                AnswerSubmission.student_id == student_id,
+                AnswerSubmission.tenant_id == tenant_id
+            )
         )
         
         # Apply filters
@@ -64,10 +72,10 @@ class ProgressService:
             from datetime import datetime, timedelta
             if time_range == "last_week":
                 cutoff = datetime.utcnow() - timedelta(days=7)
-                query = query.filter(AnswerSubmission.created_at >= cutoff)
+                query = query.filter(AnswerSubmission.submitted_at >= cutoff)
             elif time_range == "last_month":
                 cutoff = datetime.utcnow() - timedelta(days=30)
-                query = query.filter(AnswerSubmission.created_at >= cutoff)
+                query = query.filter(AnswerSubmission.submitted_at >= cutoff)
         
         stats = query.first()
         
@@ -84,7 +92,7 @@ class ProgressService:
         strong_areas = []
         
         return {
-            "student_id": student_id,
+            "student_id": str(student_id),
             "overall_stats": {
                 "total_questions": total_questions,
                 "correct_answers": correct_answers,
@@ -117,7 +125,6 @@ class ProgressService:
         }
         
         return {
-            "student_id": student_id,
+            "student_id": str(student_id),
             "analytics": analytics,
         }
-

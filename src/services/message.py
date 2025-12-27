@@ -1,13 +1,17 @@
 """
-Message service
+Message service - updated for new model structure
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 from typing import Optional, Dict, Any, List
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from src.models.database import Message, StudentAccount, TutorAccount, StudentTutorAssignment
-from src.models.user import UserRole
+from src.models.database import (
+    Message, UserAccount, StudentTutorAssignment, 
+    TutorSubjectProfile, StudentSubjectProfile
+)
+from src.models.user import UserRole, MessageStatus
 from src.core.exceptions import NotFoundError, BadRequestError, ForbiddenError
 
 
@@ -33,29 +37,45 @@ class MessageService:
         if sender_role == "student":
             # Student can only message their assigned tutor
             assignment = self.db.query(StudentTutorAssignment).filter(
-                StudentTutorAssignment.student_id == sender_id,
-                StudentTutorAssignment.tutor_id == recipient_id,
-                StudentTutorAssignment.tenant_id == tenant_id,
-                StudentTutorAssignment.status == "active",
+                and_(
+                    StudentTutorAssignment.student_id == sender_id,
+                    StudentTutorAssignment.tutor_id == recipient_id,
+                    StudentTutorAssignment.tenant_id == tenant_id,
+                    StudentTutorAssignment.status == "active"
+                )
             ).first()
             
             if not assignment:
                 raise ForbiddenError("You can only message your assigned tutor")
             
-            recipient_role = "tutor"
+            recipient_role = UserRole.TUTOR
         elif sender_role == "tutor":
             # Tutor can message assigned students
             assignment = self.db.query(StudentTutorAssignment).filter(
-                StudentTutorAssignment.tutor_id == sender_id,
-                StudentTutorAssignment.student_id == recipient_id,
-                StudentTutorAssignment.tenant_id == tenant_id,
-                StudentTutorAssignment.status == "active",
+                and_(
+                    StudentTutorAssignment.tutor_id == sender_id,
+                    StudentTutorAssignment.student_id == recipient_id,
+                    StudentTutorAssignment.tenant_id == tenant_id,
+                    StudentTutorAssignment.status == "active"
+                )
             ).first()
             
             if not assignment:
                 raise ForbiddenError("You can only message your assigned students")
             
-            recipient_role = "student"
+            recipient_role = UserRole.STUDENT
+        elif sender_role == "tenant_admin":
+            # Tenant admins can message anyone in their tenant
+            recipient_role = None  # Will be determined from recipient
+            # Verify recipient is in same tenant
+            recipient = self.db.query(UserAccount).filter(
+                and_(
+                    UserAccount.user_id == recipient_id,
+                    UserAccount.tenant_id == tenant_id
+                )
+            ).first()
+            if not recipient:
+                raise ForbiddenError("Recipient not found in your tenant")
         else:
             raise BadRequestError("Invalid sender role")
         
@@ -68,9 +88,9 @@ class MessageService:
             sender_id=sender_id,
             sender_role=UserRole(sender_role),
             recipient_id=recipient_id,
-            recipient_role=UserRole(recipient_role),
+            recipient_role=recipient_role if recipient_role else UserRole.STUDENT,  # Default, should be determined properly
             content=content,
-            status="sent",
+            status=MessageStatus.SENT,
             email_sent=False,
             subject_reference=subject_reference,
             question_reference=question_reference,
@@ -92,11 +112,11 @@ class MessageService:
             self.db.commit()
         
         return {
-            "message_id": message.message_id,
-            "sender_id": sender_id,
-            "recipient_id": recipient_id,
+            "message_id": str(message.message_id),
+            "sender_id": str(sender_id),
+            "recipient_id": str(recipient_id),
             "content": content,
-            "status": message.status,
+            "status": message.status.value,
             "email_sent": email_sent,
             "created_at": message.created_at,
         }
@@ -112,15 +132,23 @@ class MessageService:
     ) -> Dict[str, Any]:
         """Get messages for a user"""
         query = self.db.query(Message).filter(
-            Message.tenant_id == tenant_id,
-            Message.deleted_at.is_(None),
+            and_(
+                Message.tenant_id == tenant_id,
+                Message.deleted_at.is_(None)
+            )
         ).filter(
-            (Message.sender_id == user_id) | (Message.recipient_id == user_id),
+            or_(
+                Message.sender_id == user_id,
+                Message.recipient_id == user_id
+            )
         )
         
         if conversation_with:
             query = query.filter(
-                (Message.sender_id == conversation_with) | (Message.recipient_id == conversation_with),
+                or_(
+                    Message.sender_id == conversation_with,
+                    Message.recipient_id == conversation_with
+                )
             )
         
         if unread_only:
@@ -134,23 +162,25 @@ class MessageService:
             recipient = self._get_user_info(msg.recipient_id, msg.recipient_role.value)
             
             result.append({
-                "message_id": msg.message_id,
-                "sender_id": msg.sender_id,
+                "message_id": str(msg.message_id),
+                "sender_id": str(msg.sender_id),
                 "sender_name": sender.get("name", "Unknown"),
                 "sender_role": msg.sender_role.value,
-                "recipient_id": msg.recipient_id,
+                "recipient_id": str(msg.recipient_id),
                 "recipient_name": recipient.get("name", "Unknown"),
                 "content": msg.content,
-                "status": msg.status,
+                "status": msg.status.value,
                 "read_at": msg.read_at,
                 "created_at": msg.created_at,
             })
         
         unread_count = self.db.query(Message).filter(
-            Message.tenant_id == tenant_id,
-            Message.recipient_id == user_id,
-            Message.read_at.is_(None),
-            Message.deleted_at.is_(None),
+            and_(
+                Message.tenant_id == tenant_id,
+                Message.recipient_id == user_id,
+                Message.read_at.is_(None),
+                Message.deleted_at.is_(None)
+            )
         ).count()
         
         return {
@@ -182,7 +212,7 @@ class MessageService:
         
         return {
             "conversation_with": {
-                "user_id": other_user_id,
+                "user_id": str(other_user_id),
                 "name": other_user.get("name", "Unknown"),
                 "role": other_user.get("role", "unknown"),
             },
@@ -193,9 +223,11 @@ class MessageService:
     def mark_message_read(self, message_id: UUID, tenant_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Mark message as read"""
         message = self.db.query(Message).filter(
-            Message.message_id == message_id,
-            Message.tenant_id == tenant_id,
-            Message.recipient_id == user_id,
+            and_(
+                Message.message_id == message_id,
+                Message.tenant_id == tenant_id,
+                Message.recipient_id == user_id
+            )
         ).first()
         
         if not message:
@@ -203,12 +235,12 @@ class MessageService:
         
         if not message.read_at:
             message.read_at = datetime.utcnow()
-            message.status = "read"
+            message.status = MessageStatus.READ
             self.db.commit()
         
         return {
-            "message_id": message.message_id,
-            "status": message.status,
+            "message_id": str(message.message_id),
+            "status": message.status.value,
             "read_at": message.read_at,
         }
     
@@ -220,40 +252,47 @@ class MessageService:
     ) -> Dict[str, Any]:
         """Mark all messages in conversation as read"""
         count = self.db.query(Message).filter(
-            Message.tenant_id == tenant_id,
-            Message.recipient_id == user_id,
-            Message.sender_id == other_user_id,
-            Message.read_at.is_(None),
+            and_(
+                Message.tenant_id == tenant_id,
+                Message.recipient_id == user_id,
+                Message.sender_id == other_user_id,
+                Message.read_at.is_(None)
+            )
         ).update({
             "read_at": datetime.utcnow(),
-            "status": "read",
+            "status": MessageStatus.READ
         })
         
         self.db.commit()
         
         return {
-            "conversation_with": other_user_id,
+            "conversation_with": str(other_user_id),
             "messages_marked_read": count,
         }
     
     def delete_message(self, message_id: UUID, tenant_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Delete a message (soft delete)"""
         message = self.db.query(Message).filter(
-            Message.message_id == message_id,
-            Message.tenant_id == tenant_id,
+            and_(
+                Message.message_id == message_id,
+                Message.tenant_id == tenant_id
+            )
         ).filter(
-            (Message.sender_id == user_id) | (Message.recipient_id == user_id),
+            or_(
+                Message.sender_id == user_id,
+                Message.recipient_id == user_id
+            )
         ).first()
         
         if not message:
             raise NotFoundError("Message not found")
         
         message.deleted_at = datetime.utcnow()
-        message.status = "deleted"
+        message.status = MessageStatus.DELETED
         self.db.commit()
         
         return {
-            "message_id": message.message_id,
+            "message_id": str(message.message_id),
             "status": "deleted",
             "deleted_at": message.deleted_at,
         }
@@ -269,14 +308,21 @@ class MessageService:
     
     def _get_user_info(self, user_id: UUID, role: Optional[str]) -> Dict[str, Any]:
         """Get user information"""
-        if role == "student":
-            user = self.db.query(StudentAccount).filter(StudentAccount.student_id == user_id).first()
-            if user:
-                return {"name": user.username, "role": "student"}
-        elif role == "tutor":
-            user = self.db.query(TutorAccount).filter(TutorAccount.tutor_id == user_id).first()
-            if user:
-                return {"name": user.name or user.username, "role": "tutor"}
+        user = self.db.query(UserAccount).filter(UserAccount.user_id == user_id).first()
         
-        return {"name": "Unknown", "role": role or "unknown"}
-
+        if not user:
+            return {"name": "Unknown", "role": role or "unknown"}
+        
+        if role == "student":
+            return {"name": user.username, "role": "student"}
+        elif role == "tutor":
+            # Get tutor name from profile
+            profile = self.db.query(TutorSubjectProfile).filter(
+                TutorSubjectProfile.user_id == user_id
+            ).first()
+            name = profile.name if profile else user.username
+            return {"name": name, "role": "tutor"}
+        elif role == "tenant_admin":
+            return {"name": user.username, "role": "tenant_admin"}
+        else:
+            return {"name": user.username, "role": role or "unknown"}

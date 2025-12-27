@@ -1,15 +1,17 @@
 """
-FastAPI dependencies
+FastAPI dependencies - updated for new model structure
 """
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Header, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from uuid import UUID
 
 from src.core.database import get_db
 from src.core.security import decode_token
 from src.core.exceptions import UnauthorizedError, ForbiddenError
 from src.models.user import UserRole, AccountStatus
+from src.models.database import UserAccount, SystemAdminAccount, TenantAdminAccount, UserSubjectRole
 from src.services.tenant import TenantService
 
 security = HTTPBearer()
@@ -29,16 +31,73 @@ async def get_current_user(
     if user_id is None:
         raise UnauthorizedError("Invalid authentication credentials")
     
-    # Get user from database (simplified - should query actual user table)
-    # For now, return payload data
-    return {
-        "user_id": user_id,
-        "username": payload.get("username"),
-        "email": payload.get("email"),
-        "role": payload.get("role"),
-        "tenant_id": payload.get("tenant_id"),
-        "grade_level": payload.get("grade_level"),
-    }
+    # Determine user type from payload or query database
+    user_type = payload.get("user_type", "tenant_user")  # Default to tenant_user
+    
+    # Get user from database based on type
+    if user_type == "system_admin":
+        user = db.query(SystemAdminAccount).filter(
+            SystemAdminAccount.admin_id == UUID(user_id)
+        ).first()
+        
+        if not user:
+            raise UnauthorizedError("User not found")
+        
+        return {
+            "user_id": str(user.admin_id),
+            "username": user.username,
+            "email": user.email,
+            "role": user.role.value,
+            "tenant_id": None,  # System admins don't have tenant_id
+            "grade_level": None,
+            "user_type": "system_admin",
+        }
+    else:
+        # Tenant user
+        user = db.query(UserAccount).filter(
+            UserAccount.user_id == UUID(user_id)
+        ).first()
+        
+        if not user:
+            raise UnauthorizedError("User not found")
+        
+        # Determine role
+        tenant_admin = db.query(TenantAdminAccount).filter(
+            TenantAdminAccount.user_id == user.user_id
+        ).first()
+        
+        if tenant_admin:
+            role = UserRole.TENANT_ADMIN.value
+        else:
+            # Get role from subject roles
+            subject_role = db.query(UserSubjectRole).filter(
+                UserSubjectRole.user_id == user.user_id
+            ).first()
+            
+            if subject_role:
+                role = subject_role.role.value
+            else:
+                role = UserRole.STUDENT.value  # Default
+        
+        # Get grade level from student profile
+        grade_level = None
+        if role == UserRole.STUDENT.value:
+            from src.models.database import StudentSubjectProfile
+            profile = db.query(StudentSubjectProfile).filter(
+                StudentSubjectProfile.user_id == user.user_id
+            ).first()
+            if profile:
+                grade_level = profile.grade_level
+        
+        return {
+            "user_id": str(user.user_id),
+            "username": user.username,
+            "email": user.email,
+            "role": role,
+            "tenant_id": str(user.tenant_id),
+            "grade_level": grade_level,
+            "user_type": "tenant_user",
+        }
 
 
 async def get_current_tenant(
@@ -96,4 +155,3 @@ def require_tutor_or_admin(current_user: dict = Depends(get_current_user)) -> di
     if role not in allowed_roles:
         raise ForbiddenError("Tutor or admin access required")
     return current_user
-

@@ -1,8 +1,9 @@
 """
-Tenant Admin endpoints
+Tenant Admin endpoints - updated for new model structure
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 from uuid import UUID
 from typing import Optional, List
 from pydantic import BaseModel
@@ -12,8 +13,11 @@ from src.core.dependencies import require_tenant_admin
 from src.services.student import StudentService
 from src.services.tutor import TutorService
 from src.services.tenant import TenantService
-from src.models.database import StudentTutorAssignment, StudentAccount, TutorAccount
-from src.models.user import AccountStatus
+from src.models.database import (
+    StudentTutorAssignment, UserAccount, UserSubjectRole, 
+    TenantAdminAccount
+)
+from src.models.user import AccountStatus, UserRole, AssignmentStatus
 from datetime import datetime
 
 router = APIRouter()
@@ -80,35 +84,44 @@ async def get_account(
     """Get account details (tenant admin only)"""
     tenant_id = UUID(current_user["tenant_id"])
     
-    # Try student
-    student = db.query(StudentAccount).filter(
-        StudentAccount.student_id == account_id,
-        StudentAccount.tenant_id == tenant_id,
+    # Query user account
+    user = db.query(UserAccount).filter(
+        and_(
+            UserAccount.user_id == account_id,
+            UserAccount.tenant_id == tenant_id
+        )
     ).first()
-    if student:
-        return {
-            "account_id": student.student_id,
-            "username": student.username,
-            "email": student.email,
-            "role": "student",
-            "status": student.account_status.value,
-        }
     
-    # Try tutor
-    tutor = db.query(TutorAccount).filter(
-        TutorAccount.tutor_id == account_id,
-        TutorAccount.tenant_id == tenant_id,
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    
+    # Determine role from subject roles
+    subject_role = db.query(UserSubjectRole).filter(
+        and_(
+            UserSubjectRole.user_id == user.user_id,
+            UserSubjectRole.status == AssignmentStatus.ACTIVE
+        )
     ).first()
-    if tutor:
-        return {
-            "account_id": tutor.tutor_id,
-            "username": tutor.username,
-            "email": tutor.email,
-            "role": "tutor",
-            "status": tutor.account_status.value,
-        }
     
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    # Check if tenant admin
+    tenant_admin = db.query(TenantAdminAccount).filter(
+        TenantAdminAccount.user_id == user.user_id
+    ).first()
+    
+    if tenant_admin:
+        role = "tenant_admin"
+    elif subject_role:
+        role = subject_role.role.value
+    else:
+        role = "unknown"
+    
+    return {
+        "account_id": str(user.user_id),
+        "username": user.username,
+        "email": user.email,
+        "role": role,
+        "status": user.account_status.value,
+    }
 
 
 @router.put("/accounts/{account_id}/status", status_code=status.HTTP_200_OK)
@@ -122,27 +135,19 @@ async def update_account_status(
     """Update account status (tenant admin only)"""
     tenant_id = UUID(current_user["tenant_id"])
     
-    account = db.query(StudentAccount).filter(
-        StudentAccount.student_id == account_id,
-        StudentAccount.tenant_id == tenant_id,
+    account = db.query(UserAccount).filter(
+        and_(
+            UserAccount.user_id == account_id,
+            UserAccount.tenant_id == tenant_id
+        )
     ).first()
     
-    if account:
-        account.account_status = AccountStatus(status)
-        db.commit()
-        return {"account_id": account_id, "status": status}
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
     
-    account = db.query(TutorAccount).filter(
-        TutorAccount.tutor_id == account_id,
-        TutorAccount.tenant_id == tenant_id,
-    ).first()
-    
-    if account:
-        account.account_status = AccountStatus(status)
-        db.commit()
-        return {"account_id": account_id, "status": status}
-    
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    account.account_status = AccountStatus(status)
+    db.commit()
+    return {"account_id": str(account_id), "status": status}
 
 
 @router.post("/students", status_code=status.HTTP_201_CREATED)
@@ -201,18 +206,22 @@ async def assign_student_to_tutor(
     tenant_id = UUID(current_user["tenant_id"])
     assigned_by = UUID(current_user["user_id"])
     
-    # Verify student and tutor belong to tenant
-    student = db.query(StudentAccount).filter(
-        StudentAccount.student_id == request.student_id,
-        StudentAccount.tenant_id == tenant_id,
+    # Verify student and tutor exist and are in the same tenant
+    student = db.query(UserAccount).filter(
+        and_(
+            UserAccount.user_id == request.student_id,
+            UserAccount.tenant_id == tenant_id
+        )
     ).first()
     
     if not student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
     
-    tutor = db.query(TutorAccount).filter(
-        TutorAccount.tutor_id == request.tutor_id,
-        TutorAccount.tenant_id == tenant_id,
+    tutor = db.query(UserAccount).filter(
+        and_(
+            UserAccount.user_id == request.tutor_id,
+            UserAccount.tenant_id == tenant_id
+        )
     ).first()
     
     if not tutor:
@@ -220,25 +229,30 @@ async def assign_student_to_tutor(
     
     # Check if assignment already exists
     existing = db.query(StudentTutorAssignment).filter(
-        StudentTutorAssignment.student_id == request.student_id,
-        StudentTutorAssignment.tutor_id == request.tutor_id,
-        StudentTutorAssignment.tenant_id == tenant_id,
+        and_(
+            StudentTutorAssignment.student_id == request.student_id,
+            StudentTutorAssignment.tutor_id == request.tutor_id,
+            StudentTutorAssignment.tenant_id == tenant_id,
+            StudentTutorAssignment.status == AssignmentStatus.ACTIVE
+        )
     ).first()
     
     if existing:
-        if existing.status == "active":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignment already exists")
-        else:
-            existing.status = "active"
-            db.commit()
-            return {"assignment_id": existing.assignment_id, "status": "active"}
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignment already exists")
     
-    # Create assignment
+    # Create assignment (need subject_id - for now use first subject)
+    # TODO: Make subject_id required or get from request
+    from src.models.database import Subject
+    subject = db.query(Subject).filter(Subject.status == "active").first()
+    if not subject:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active subjects found")
+    
     assignment = StudentTutorAssignment(
         tenant_id=tenant_id,
+        subject_id=subject.subject_id,
         student_id=request.student_id,
         tutor_id=request.tutor_id,
-        status="active",
+        status=AssignmentStatus.ACTIVE,
         assigned_by=assigned_by,
     )
     
@@ -247,9 +261,10 @@ async def assign_student_to_tutor(
     db.refresh(assignment)
     
     return {
-        "assignment_id": assignment.assignment_id,
-        "student_id": request.student_id,
-        "tutor_id": request.tutor_id,
+        "assignment_id": str(assignment.assignment_id),
+        "student_id": str(request.student_id),
+        "tutor_id": str(request.tutor_id),
+        "status": assignment.status.value,
         "assigned_at": assignment.assigned_at,
     }
 
@@ -264,23 +279,24 @@ async def remove_assignment(
     tenant_id = UUID(current_user["tenant_id"])
     
     assignment = db.query(StudentTutorAssignment).filter(
-        StudentTutorAssignment.assignment_id == assignment_id,
-        StudentTutorAssignment.tenant_id == tenant_id,
+        and_(
+            StudentTutorAssignment.assignment_id == assignment_id,
+            StudentTutorAssignment.tenant_id == tenant_id
+        )
     ).first()
     
     if not assignment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
     
-    assignment.status = "inactive"
+    assignment.status = AssignmentStatus.INACTIVE
     assignment.deactivated_at = datetime.utcnow()
     assignment.deactivated_by = UUID(current_user["user_id"])
     
     db.commit()
     
     return {
-        "assignment_id": assignment_id,
-        "status": "removed",
-        "removed_at": assignment.deactivated_at,
+        "assignment_id": str(assignment_id),
+        "status": "deactivated",
     }
 
 
@@ -294,67 +310,64 @@ async def bulk_assign_students(
     tenant_id = UUID(current_user["tenant_id"])
     assigned_by = UUID(current_user["user_id"])
     
+    # Get first active subject (TODO: Make subject_id required)
+    from src.models.database import Subject
+    subject = db.query(Subject).filter(Subject.status == "active").first()
+    if not subject:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active subjects found")
+    
     assignments = []
-    failed = []
+    errors = []
     
     for student_id in request.student_ids:
-        try:
-            # Verify student belongs to tenant
-            student = db.query(StudentAccount).filter(
-                StudentAccount.student_id == student_id,
-                StudentAccount.tenant_id == tenant_id,
-            ).first()
-            
-            if not student:
-                failed.append({"student_id": student_id, "reason": "Student not found"})
-                continue
-            
-            # Check if assignment exists
-            existing = db.query(StudentTutorAssignment).filter(
+        # Check if assignment already exists
+        existing = db.query(StudentTutorAssignment).filter(
+            and_(
                 StudentTutorAssignment.student_id == student_id,
                 StudentTutorAssignment.tutor_id == request.tutor_id,
                 StudentTutorAssignment.tenant_id == tenant_id,
-            ).first()
-            
-            if existing:
-                if existing.status == "active":
-                    failed.append({"student_id": student_id, "reason": "Already assigned"})
-                    continue
-                else:
-                    existing.status = "active"
-                    assignments.append(existing)
-                    continue
-            
-            assignment = StudentTutorAssignment(
-                tenant_id=tenant_id,
-                student_id=student_id,
-                tutor_id=request.tutor_id,
-                status="active",
-                assigned_by=assigned_by,
+                StudentTutorAssignment.status == AssignmentStatus.ACTIVE
             )
-            db.add(assignment)
-            assignments.append(assignment)
-        except Exception as e:
-            failed.append({"student_id": student_id, "reason": str(e)})
+        ).first()
+        
+        if existing:
+            errors.append(f"Assignment already exists for student {student_id}")
+            continue
+        
+        assignment = StudentTutorAssignment(
+            tenant_id=tenant_id,
+            subject_id=subject.subject_id,
+            student_id=student_id,
+            tutor_id=request.tutor_id,
+            status=AssignmentStatus.ACTIVE,
+            assigned_by=assigned_by,
+        )
+        db.add(assignment)
+        assignments.append(assignment)
     
     db.commit()
     
     return {
-        "tutor_id": request.tutor_id,
-        "assigned_count": len(assignments),
-        "failed_assignments": failed,
-        "assignments": [{"assignment_id": a.assignment_id, "student_id": a.student_id} for a in assignments],
+        "created": len(assignments),
+        "errors": errors,
+        "assignments": [
+            {
+                "assignment_id": str(a.assignment_id),
+                "student_id": str(a.student_id),
+                "tutor_id": str(a.tutor_id),
+            }
+            for a in assignments
+        ],
     }
 
 
 @router.get("/statistics", status_code=status.HTTP_200_OK)
-async def get_tenant_statistics(
+async def get_statistics(
     current_user: dict = Depends(require_tenant_admin),
     db: Session = Depends(get_db),
 ):
     """Get tenant statistics (tenant admin only)"""
-    tenant_service = TenantService(db)
     tenant_id = UUID(current_user["tenant_id"])
-    
-    result = tenant_service.get_tenant_statistics(tenant_id)
-    return result
+    tenant_service = TenantService(db)
+    stats = tenant_service.get_tenant_statistics(tenant_id)
+    return stats

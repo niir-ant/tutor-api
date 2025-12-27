@@ -42,7 +42,8 @@ class QuestionService:
         if not subject:
             raise NotFoundError("Subject not found")
         
-        if subject.status != "active":
+        from src.models.user import SubjectStatus
+        if subject.status != SubjectStatus.ACTIVE:
             raise BadRequestError("Subject is not active")
         
         # Validate grade level if subject requires it
@@ -65,8 +66,8 @@ class QuestionService:
             question_type=question_type or "multiple_choice",
             question_text="Placeholder question - AI integration needed",
             options=["Option A", "Option B", "Option C", "Option D"] if question_type == "multiple_choice" else None,
-            correct_answer="Option A",
-            extra_metadata={
+            correct_answer={"answer": "Option A"},
+            metadata={
                 "topic": topic,
                 "learning_objectives": [],
                 "estimated_time": 60,
@@ -83,10 +84,10 @@ class QuestionService:
             "question_type": question.question_type,
             "options": question.options,
             "metadata": {
-                "difficulty": question.difficulty,
-                "estimated_time": question.extra_metadata.get("estimated_time"),
-                "learning_objectives": question.extra_metadata.get("learning_objectives", []),
-                "topic": question.extra_metadata.get("topic"),
+                "difficulty": question.difficulty.value if hasattr(question.difficulty, 'value') else question.difficulty,
+                "estimated_time": question.metadata.get("estimated_time") if question.metadata else None,
+                "learning_objectives": question.metadata.get("learning_objectives", []) if question.metadata else [],
+                "topic": question.metadata.get("topic") if question.metadata else None,
             },
             "session_id": session_id,
         }
@@ -108,7 +109,7 @@ class QuestionService:
             "question_text": question.question_text,
             "question_type": question.question_type,
             "options": question.options,
-            "metadata": question.extra_metadata or {},
+            "metadata": question.metadata or {},
         }
     
     def get_question_narrative(self, question_id: UUID, tenant_id: Optional[UUID] = None) -> Dict[str, Any]:

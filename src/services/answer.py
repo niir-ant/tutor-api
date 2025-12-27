@@ -53,7 +53,7 @@ class AnswerService:
         # TODO: Implement AI-based validation for different question types
         is_correct = self._validate_answer(question, answer)
         score = self._calculate_score(question, answer, is_correct, hints_used)
-        max_score = question.extra_metadata.get("points", 1.0) if question.extra_metadata else 1.0
+        max_score = question.metadata.get("points", 1.0) if question.metadata else 1.0
         
         # Create submission record
         submission = AnswerSubmission(
@@ -105,7 +105,7 @@ class AnswerService:
         
         is_correct = self._validate_answer(question, answer)
         score = self._calculate_score(question, answer, is_correct, None)
-        max_score = question.extra_metadata.get("points", 1.0) if question.extra_metadata else 1.0
+        max_score = question.metadata.get("points", 1.0) if question.metadata else 1.0
         
         return {
             "correct": is_correct,
@@ -136,7 +136,7 @@ class AnswerService:
         hints_used: Optional[List[UUID]],
     ) -> float:
         """Calculate score for answer"""
-        max_score = question.extra_metadata.get("points", 1.0) if question.extra_metadata else 1.0
+        max_score = question.metadata.get("points", 1.0) if question.metadata else 1.0
         
         if is_correct:
             score = max_score

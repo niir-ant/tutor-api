@@ -8,7 +8,7 @@ from datetime import datetime
 
 from src.models.database import (
     Competition, CompetitionRegistration, CompetitionSession,
-    QuizSession, StudentAccount, Subject
+    QuizSession, UserAccount, Subject
 )
 from src.core.exceptions import NotFoundError, BadRequestError
 from src.services.session import SessionService
@@ -316,8 +316,11 @@ class CompetitionService:
         )
         
         if grade_level:
-            # Join with student accounts to filter by grade
-            query = query.join(StudentAccount).filter(StudentAccount.grade_level == grade_level)
+            # Join with student profiles to filter by grade
+            from src.models.database import StudentSubjectProfile
+            query = query.join(StudentSubjectProfile).filter(
+                StudentSubjectProfile.grade_level == grade_level
+            )
         
         sessions = query.order_by(
             CompetitionSession.score.desc(),
@@ -327,13 +330,13 @@ class CompetitionService:
         
         leaderboard = []
         for idx, session in enumerate(sessions, start=offset + 1):
-            student = self.db.query(StudentAccount).filter(
-                StudentAccount.student_id == session.student_id,
+            student = self.db.query(UserAccount).filter(
+                UserAccount.user_id == session.student_id,
             ).first()
             
             leaderboard.append({
                 "rank": idx,
-                "student_id": session.student_id,
+                "student_id": str(session.student_id),
                 "student_name": student.username if student else "Unknown",
                 "score": float(session.score),
                 "max_score": float(session.max_score),

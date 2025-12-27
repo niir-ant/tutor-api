@@ -1,15 +1,18 @@
 """
-Tutor service
+Tutor service - updated for new model structure
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func
 from typing import Optional, Dict, Any, List
 from uuid import UUID
-from sqlalchemy import func
 
-from src.models.database import TutorAccount, StudentTutorAssignment, StudentAccount, AnswerSubmission
+from src.models.database import (
+    UserAccount, UserSubjectRole, TutorSubjectProfile, 
+    StudentTutorAssignment, AnswerSubmission
+)
 from src.core.exceptions import NotFoundError, BadRequestError
 from src.core.security import get_password_hash
-from src.models.user import AccountStatus
+from src.models.user import AccountStatus, UserRole, AssignmentStatus
 
 
 class TutorService:
@@ -28,41 +31,47 @@ class TutorService:
         send_activation_email: bool = False,
     ) -> Dict[str, Any]:
         """Create a new tutor account"""
-        # Check if username or email already exists
-        existing = self.db.query(TutorAccount).filter(
-            (TutorAccount.username == username) | (TutorAccount.email == email),
+        # Check if username or email already exists in this tenant
+        existing = self.db.query(UserAccount).filter(
+            and_(
+                or_(
+                    UserAccount.username == username,
+                    UserAccount.email == email
+                ),
+                UserAccount.tenant_id == tenant_id
+            )
         ).first()
         
         if existing:
-            raise BadRequestError("Username or email already exists")
+            raise BadRequestError("Username or email already exists in this tenant")
         
         # Generate temporary password
         import secrets
         temp_password = secrets.token_urlsafe(12)
         password_hash = get_password_hash(temp_password)
         
-        tutor = TutorAccount(
+        # Create user account
+        user = UserAccount(
             tenant_id=tenant_id,
             username=username,
             email=email,
             password_hash=password_hash,
-            name=name,
             account_status=AccountStatus.PENDING_ACTIVATION,
             requires_password_change=True,
+            created_by=created_by,
         )
         
-        self.db.add(tutor)
-        self.db.commit()
-        self.db.refresh(tutor)
+        self.db.add(user)
+        self.db.flush()  # Flush to get user_id
         
         # TODO: Send activation email if requested
         
         result = {
-            "tutor_id": tutor.tutor_id,
-            "username": tutor.username,
-            "email": tutor.email,
-            "status": tutor.account_status.value,
-            "created_at": tutor.created_at,
+            "user_id": str(user.user_id),
+            "username": user.username,
+            "email": user.email,
+            "status": user.account_status.value,
+            "created_at": user.created_at,
         }
         
         if not send_activation_email:
@@ -72,24 +81,44 @@ class TutorService:
     
     def get_tutor(self, tutor_id: UUID, tenant_id: Optional[UUID] = None) -> Dict[str, Any]:
         """Get tutor details"""
-        query = self.db.query(TutorAccount).filter(TutorAccount.tutor_id == tutor_id)
+        query = self.db.query(UserAccount).filter(UserAccount.user_id == tutor_id)
         
         if tenant_id:
-            query = query.filter(TutorAccount.tenant_id == tenant_id)
+            query = query.filter(UserAccount.tenant_id == tenant_id)
         
-        tutor = query.first()
-        if not tutor:
+        user = query.first()
+        if not user:
             raise NotFoundError("Tutor not found")
         
+        # Verify user has tutor role (check subject roles)
+        has_tutor_role = self.db.query(UserSubjectRole).filter(
+            and_(
+                UserSubjectRole.user_id == user.user_id,
+                UserSubjectRole.role == UserRole.TUTOR,
+                UserSubjectRole.status == AssignmentStatus.ACTIVE
+            )
+        ).first()
+        
+        if not has_tutor_role:
+            raise NotFoundError("User is not a tutor")
+        
+        # Get tutor profile
+        profile = self.db.query(TutorSubjectProfile).filter(
+            TutorSubjectProfile.user_id == user.user_id
+        ).first()
+        
+        name = profile.name if profile else user.username
+        profile_data = profile.profile if profile else None
+        
         return {
-            "tutor_id": tutor.tutor_id,
-            "username": tutor.username,
-            "email": tutor.email,
-            "name": tutor.name,
-            "status": tutor.account_status.value,
-            "profile": tutor.profile,
-            "created_at": tutor.created_at,
-            "last_login": tutor.last_login,
+            "user_id": str(user.user_id),
+            "username": user.username,
+            "email": user.email,
+            "name": name,
+            "status": user.account_status.value,
+            "profile": profile_data,
+            "created_at": user.created_at,
+            "last_login": user.last_login,
         }
     
     def list_tutors(
@@ -99,36 +128,59 @@ class TutorService:
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
         """List tutors"""
-        query = self.db.query(TutorAccount).filter(TutorAccount.tenant_id == tenant_id)
+        # Find all users with tutor role in this tenant
+        tutor_role_ids = self.db.query(UserSubjectRole.user_id).filter(
+            and_(
+                UserSubjectRole.tenant_id == tenant_id,
+                UserSubjectRole.role == UserRole.TUTOR,
+                UserSubjectRole.status == AssignmentStatus.ACTIVE
+            )
+        ).distinct().subquery()
+        
+        query = self.db.query(UserAccount).filter(
+            and_(
+                UserAccount.tenant_id == tenant_id,
+                UserAccount.user_id.in_(self.db.query(tutor_role_ids.c.user_id))
+            )
+        )
         
         if status:
-            query = query.filter(TutorAccount.account_status == AccountStatus(status))
+            query = query.filter(UserAccount.account_status == AccountStatus(status))
         
         if search:
             query = query.filter(
-                (TutorAccount.username.ilike(f"%{search}%")) |
-                (TutorAccount.email.ilike(f"%{search}%")) |
-                (TutorAccount.name.ilike(f"%{search}%"))
+                or_(
+                    UserAccount.username.ilike(f"%{search}%"),
+                    UserAccount.email.ilike(f"%{search}%")
+                )
             )
         
-        tutors = query.order_by(TutorAccount.created_at.desc()).all()
+        users = query.order_by(UserAccount.created_at.desc()).all()
         
         result = []
-        for tutor in tutors:
+        for user in users:
             # Get student count
             student_count = self.db.query(StudentTutorAssignment).filter(
-                StudentTutorAssignment.tutor_id == tutor.tutor_id,
-                StudentTutorAssignment.status == "active",
+                and_(
+                    StudentTutorAssignment.tutor_id == user.user_id,
+                    StudentTutorAssignment.status == AssignmentStatus.ACTIVE
+                )
             ).count()
             
+            # Get tutor name from profile
+            profile = self.db.query(TutorSubjectProfile).filter(
+                TutorSubjectProfile.user_id == user.user_id
+            ).first()
+            name = profile.name if profile else user.username
+            
             result.append({
-                "tutor_id": tutor.tutor_id,
-                "username": tutor.username,
-                "email": tutor.email,
-                "name": tutor.name,
-                "status": tutor.account_status.value,
+                "user_id": str(user.user_id),
+                "username": user.username,
+                "email": user.email,
+                "name": name,
+                "status": user.account_status.value,
                 "student_count": student_count,
-                "created_at": tutor.created_at,
+                "created_at": user.created_at,
             })
         
         return {
@@ -138,47 +190,73 @@ class TutorService:
     
     def get_tutor_students(self, tutor_id: UUID, tenant_id: UUID) -> Dict[str, Any]:
         """Get students assigned to a tutor"""
-        tutor = self.db.query(TutorAccount).filter(
-            TutorAccount.tutor_id == tutor_id,
-            TutorAccount.tenant_id == tenant_id,
+        # Verify tutor exists and has tutor role
+        tutor = self.db.query(UserAccount).filter(
+            and_(
+                UserAccount.user_id == tutor_id,
+                UserAccount.tenant_id == tenant_id
+            )
         ).first()
         
         if not tutor:
             raise NotFoundError("Tutor not found")
         
+        has_tutor_role = self.db.query(UserSubjectRole).filter(
+            and_(
+                UserSubjectRole.user_id == tutor_id,
+                UserSubjectRole.role == UserRole.TUTOR,
+                UserSubjectRole.status == AssignmentStatus.ACTIVE
+            )
+        ).first()
+        
+        if not has_tutor_role:
+            raise NotFoundError("User is not a tutor")
+        
         assignments = self.db.query(StudentTutorAssignment).filter(
-            StudentTutorAssignment.tutor_id == tutor_id,
-            StudentTutorAssignment.tenant_id == tenant_id,
-            StudentTutorAssignment.status == "active",
+            and_(
+                StudentTutorAssignment.tutor_id == tutor_id,
+                StudentTutorAssignment.tenant_id == tenant_id,
+                StudentTutorAssignment.status == AssignmentStatus.ACTIVE
+            )
         ).all()
         
         students = []
         for assignment in assignments:
-            student = self.db.query(StudentAccount).filter(
-                StudentAccount.student_id == assignment.student_id,
+            student = self.db.query(UserAccount).filter(
+                UserAccount.user_id == assignment.student_id
             ).first()
             
             if student:
                 # Get progress summary
                 total_questions = self.db.query(func.count(AnswerSubmission.submission_id)).filter(
-                    AnswerSubmission.student_id == student.student_id,
-                    AnswerSubmission.tenant_id == tenant_id,
+                    and_(
+                        AnswerSubmission.student_id == student.user_id,
+                        AnswerSubmission.tenant_id == tenant_id
+                    )
                 ).scalar() or 0
                 
                 correct_answers = self.db.query(func.count(AnswerSubmission.submission_id)).filter(
-                    AnswerSubmission.student_id == student.student_id,
-                    AnswerSubmission.tenant_id == tenant_id,
-                    AnswerSubmission.is_correct == True,
+                    and_(
+                        AnswerSubmission.student_id == student.user_id,
+                        AnswerSubmission.tenant_id == tenant_id,
+                        AnswerSubmission.is_correct == True
+                    )
                 ).scalar() or 0
                 
                 accuracy = (correct_answers / total_questions * 100) if total_questions > 0 else 0.0
                 
+                # Get grade level
+                from src.models.database import StudentSubjectProfile
+                profile = self.db.query(StudentSubjectProfile).filter(
+                    StudentSubjectProfile.user_id == student.user_id
+                ).first()
+                
                 students.append({
-                    "student_id": student.student_id,
+                    "user_id": str(student.user_id),
                     "username": student.username,
                     "name": student.username,
                     "email": student.email,
-                    "grade_level": student.grade_level,
+                    "grade_level": profile.grade_level if profile else None,
                     "assigned_at": assignment.assigned_at,
                     "progress_summary": {
                         "total_questions": total_questions,
@@ -188,7 +266,7 @@ class TutorService:
                 })
         
         return {
-            "tutor_id": tutor_id,
+            "tutor_id": str(tutor_id),
             "students": students,
             "total": len(students),
         }
@@ -202,17 +280,19 @@ class TutorService:
         """Get student progress (tutor view)"""
         # Verify assignment
         assignment = self.db.query(StudentTutorAssignment).filter(
-            StudentTutorAssignment.tutor_id == tutor_id,
-            StudentTutorAssignment.student_id == student_id,
-            StudentTutorAssignment.tenant_id == tenant_id,
-            StudentTutorAssignment.status == "active",
+            and_(
+                StudentTutorAssignment.tutor_id == tutor_id,
+                StudentTutorAssignment.student_id == student_id,
+                StudentTutorAssignment.tenant_id == tenant_id,
+                StudentTutorAssignment.status == AssignmentStatus.ACTIVE
+            )
         ).first()
         
         if not assignment:
             raise NotFoundError("Student not assigned to this tutor")
         
-        student = self.db.query(StudentAccount).filter(
-            StudentAccount.student_id == student_id,
+        student = self.db.query(UserAccount).filter(
+            UserAccount.user_id == student_id
         ).first()
         
         if not student:
@@ -224,8 +304,7 @@ class TutorService:
         progress = progress_service.get_student_progress(student_id, tenant_id)
         
         return {
-            "student_id": student_id,
+            "student_id": str(student_id),
             "student_name": student.username,
             **progress,
         }
-

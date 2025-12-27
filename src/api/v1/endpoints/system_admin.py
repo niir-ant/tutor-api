@@ -21,7 +21,10 @@ from src.schemas.tenant import (
 from src.services.tenant import TenantService
 from src.services.student import StudentService
 from src.services.tutor import TutorService
-from src.models.database import AdministratorAccount, StudentAccount, TutorAccount
+from src.models.database import (
+    SystemAdminAccount, TenantAdminAccount, UserAccount, 
+    UserSubjectRole
+)
 from src.core.security import get_password_hash
 from src.models.user import UserRole, AccountStatus
 
@@ -138,28 +141,44 @@ async def create_tenant_admin(
     db: Session = Depends(get_db),
 ):
     """Create tenant admin account (system admin only)"""
-    # Check if username or email already exists
-    existing = db.query(AdministratorAccount).filter(
-        (AdministratorAccount.username == username) | (AdministratorAccount.email == email),
+    # Check if username or email already exists in this tenant
+    existing = db.query(UserAccount).filter(
+        and_(
+            or_(
+                UserAccount.username == username,
+                UserAccount.email == email
+            ),
+            UserAccount.tenant_id == tenant_id
+        )
     ).first()
     
     if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username or email already exists")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username or email already exists in this tenant")
     
     # Generate temporary password
     import secrets
     temp_password = secrets.token_urlsafe(12)
     password_hash = get_password_hash(temp_password)
     
-    admin = AdministratorAccount(
+    # Create user account
+    user = UserAccount(
         tenant_id=tenant_id,
         username=username,
         email=email,
         password_hash=password_hash,
-        name=name,
-        role=UserRole.TENANT_ADMIN,
         account_status=AccountStatus.PENDING_ACTIVATION,
         requires_password_change=True,
+        created_by=UUID(current_user["user_id"]),
+    )
+    
+    db.add(user)
+    db.flush()  # Get user_id
+    
+    # Create tenant admin account
+    admin = TenantAdminAccount(
+        user_id=user.user_id,
+        tenant_id=tenant_id,
+        name=name or username,
     )
     
     db.add(admin)
@@ -167,13 +186,14 @@ async def create_tenant_admin(
     db.refresh(admin)
     
     result = {
-        "admin_id": admin.admin_id,
-        "tenant_id": tenant_id,
-        "username": admin.username,
-        "email": admin.email,
-        "role": admin.role.value,
-        "status": admin.account_status.value,
-        "created_at": admin.created_at,
+        "admin_id": str(admin.tenant_admin_id),
+        "user_id": str(user.user_id),
+        "tenant_id": str(tenant_id),
+        "username": user.username,
+        "email": user.email,
+        "role": UserRole.TENANT_ADMIN.value,
+        "status": user.account_status.value,
+        "created_at": user.created_at,
     }
     
     if not send_activation_email:
@@ -193,72 +213,89 @@ async def list_accounts(
     """List all accounts (system admin only)"""
     accounts = []
     
-    # Get students
-    if not role or role == "student":
-        query = db.query(StudentAccount)
+    # Get tenant users (students, tutors, tenant admins)
+    if not role or role in ["student", "tutor", "tenant_admin"]:
+        query = db.query(UserAccount)
+        
         if status:
-            query = query.filter(StudentAccount.account_status == AccountStatus(status))
+            query = query.filter(UserAccount.account_status == AccountStatus(status))
+        
         if search:
             query = query.filter(
-                (StudentAccount.username.ilike(f"%{search}%")) |
-                (StudentAccount.email.ilike(f"%{search}%"))
+                or_(
+                    UserAccount.username.ilike(f"%{search}%"),
+                    UserAccount.email.ilike(f"%{search}%")
+                )
             )
-        students = query.all()
-        for student in students:
+        
+        users = query.all()
+        
+        for user in users:
+            # Determine role
+            tenant_admin = db.query(TenantAdminAccount).filter(
+                TenantAdminAccount.user_id == user.user_id
+            ).first()
+            
+            if tenant_admin:
+                user_role = "tenant_admin"
+                name = tenant_admin.name
+            else:
+                # Get role from subject roles
+                subject_role = db.query(UserSubjectRole).filter(
+                    and_(
+                        UserSubjectRole.user_id == user.user_id,
+                        UserSubjectRole.status == AssignmentStatus.ACTIVE
+                    )
+                ).first()
+                
+                if subject_role:
+                    user_role = subject_role.role.value
+                else:
+                    user_role = "unknown"
+                
+                name = user.username
+            
+            # Filter by role if specified
+            if role and user_role != role:
+                continue
+            
             accounts.append({
-                "account_id": student.student_id,
-                "username": student.username,
-                "email": student.email,
-                "name": student.username,
-                "role": "student",
-                "status": student.account_status.value,
-                "created_at": student.created_at,
-                "last_login": student.last_login,
+                "account_id": str(user.user_id),
+                "username": user.username,
+                "email": user.email,
+                "name": name,
+                "role": user_role,
+                "tenant_id": str(user.tenant_id),
+                "status": user.account_status.value,
+                "created_at": user.created_at,
+                "last_login": user.last_login,
             })
     
-    # Get tutors
-    if not role or role == "tutor":
-        query = db.query(TutorAccount)
+    # Get system admins
+    if not role or role == "system_admin":
+        query = db.query(SystemAdminAccount)
+        
         if status:
-            query = query.filter(TutorAccount.account_status == AccountStatus(status))
+            query = query.filter(SystemAdminAccount.account_status == AccountStatus(status))
+        
         if search:
             query = query.filter(
-                (TutorAccount.username.ilike(f"%{search}%")) |
-                (TutorAccount.email.ilike(f"%{search}%")) |
-                (TutorAccount.name.ilike(f"%{search}%"))
+                or_(
+                    SystemAdminAccount.username.ilike(f"%{search}%"),
+                    SystemAdminAccount.email.ilike(f"%{search}%"),
+                    SystemAdminAccount.name.ilike(f"%{search}%")
+                )
             )
-        tutors = query.all()
-        for tutor in tutors:
-            accounts.append({
-                "account_id": tutor.tutor_id,
-                "username": tutor.username,
-                "email": tutor.email,
-                "name": tutor.name or tutor.username,
-                "role": "tutor",
-                "status": tutor.account_status.value,
-                "created_at": tutor.created_at,
-                "last_login": tutor.last_login,
-            })
-    
-    # Get admins
-    if not role or role == "admin":
-        query = db.query(AdministratorAccount)
-        if status:
-            query = query.filter(AdministratorAccount.account_status == AccountStatus(status))
-        if search:
-            query = query.filter(
-                (AdministratorAccount.username.ilike(f"%{search}%")) |
-                (AdministratorAccount.email.ilike(f"%{search}%")) |
-                (AdministratorAccount.name.ilike(f"%{search}%"))
-            )
+        
         admins = query.all()
         for admin in admins:
             accounts.append({
-                "account_id": admin.admin_id,
+                "account_id": str(admin.admin_id),
                 "username": admin.username,
                 "email": admin.email,
-                "name": admin.name or admin.username,
+                "name": admin.name,
                 "role": admin.role.value,
+                "tenant_id": None,
                 "status": admin.account_status.value,
                 "created_at": admin.created_at,
                 "last_login": admin.last_login,
@@ -279,24 +316,19 @@ async def update_account_status(
     db: Session = Depends(get_db),
 ):
     """Update account status (system admin only)"""
-    # Try to find account in different tables
-    account = db.query(StudentAccount).filter(StudentAccount.student_id == account_id).first()
+    # Try to find account in UserAccount (tenant-scoped users)
+    account = db.query(UserAccount).filter(UserAccount.user_id == account_id).first()
     if account:
         account.account_status = AccountStatus(status)
         db.commit()
-        return {"account_id": account_id, "status": status, "updated_at": account.updated_at}
+        return {"account_id": str(account_id), "status": status, "updated_at": account.updated_at}
     
-    account = db.query(TutorAccount).filter(TutorAccount.tutor_id == account_id).first()
+    # Try SystemAdminAccount
+    account = db.query(SystemAdminAccount).filter(SystemAdminAccount.admin_id == account_id).first()
     if account:
         account.account_status = AccountStatus(status)
         db.commit()
-        return {"account_id": account_id, "status": status, "updated_at": account.updated_at}
-    
-    account = db.query(AdministratorAccount).filter(AdministratorAccount.admin_id == account_id).first()
-    if account:
-        account.account_status = AccountStatus(status)
-        db.commit()
-        return {"account_id": account_id, "status": status, "updated_at": account.updated_at}
+        return {"account_id": str(account_id), "status": status, "updated_at": account.updated_at}
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
 
@@ -309,14 +341,36 @@ async def get_system_statistics(
     """Get system-wide statistics (system admin only)"""
     from sqlalchemy import func
     
-    total_students = db.query(func.count(StudentAccount.student_id)).scalar() or 0
-    total_tutors = db.query(func.count(TutorAccount.tutor_id)).scalar() or 0
-    total_admins = db.query(func.count(AdministratorAccount.admin_id)).scalar() or 0
+    # Count students (users with student role)
+    total_students = db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+        and_(
+            UserSubjectRole.role == UserRole.STUDENT,
+            UserSubjectRole.status == AssignmentStatus.ACTIVE
+        )
+    ).scalar() or 0
+    
+    # Count tutors (users with tutor role)
+    total_tutors = db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+        and_(
+            UserSubjectRole.role == UserRole.TUTOR,
+            UserSubjectRole.status == AssignmentStatus.ACTIVE
+        )
+    ).scalar() or 0
+    
+    # Count tenant admins
+    total_tenant_admins = db.query(func.count(TenantAdminAccount.tenant_admin_id)).scalar() or 0
+    
+    # Count system admins
+    total_system_admins = db.query(func.count(SystemAdminAccount.admin_id)).scalar() or 0
+    
+    total_admins = total_tenant_admins + total_system_admins
     
     return {
         "users": {
             "total_students": total_students,
             "total_tutors": total_tutors,
+            "total_tenant_admins": total_tenant_admins,
+            "total_system_admins": total_system_admins,
             "total_admins": total_admins,
             "active_accounts": 0,  # TODO: Calculate
             "inactive_accounts": 0,  # TODO: Calculate

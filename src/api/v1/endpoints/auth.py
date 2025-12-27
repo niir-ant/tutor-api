@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.core.database import get_db
-from src.core.dependencies import get_current_tenant
+from src.core.dependencies import get_current_tenant, get_current_user
 from src.core.security import verify_password, create_access_token, create_refresh_token
 from src.core.config import settings
 from src.schemas.auth import (
@@ -39,19 +39,14 @@ async def login(
     """
     User login endpoint
     """
-    # Resolve tenant
+    # Resolve tenant (optional for system admins)
     tenant_domain = request.domain or domain or x_tenant_domain
-    if not tenant_domain:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Domain is required to identify tenant",
-        )
     
     auth_service = AuthService(db)
     user = auth_service.authenticate_user(
         username=request.username,
         password=request.password,
-        domain=tenant_domain,
+        domain=tenant_domain,  # Can be None for system admins
     )
     
     if not user:
@@ -74,6 +69,7 @@ async def login(
         "email": user["email"],
         "role": user["role"],
         "tenant_id": str(user["tenant_id"]) if user.get("tenant_id") else None,
+        "user_type": user.get("user_type", "tenant_user"),  # "tenant_user" or "system_admin"
     }
     
     access_token = create_access_token(
@@ -127,6 +123,7 @@ async def refresh_token(
             "email": payload.get("email"),
             "role": payload.get("role"),
             "tenant_id": payload.get("tenant_id"),
+            "user_type": payload.get("user_type", "tenant_user"),
         }
         
         access_token = create_access_token(
@@ -149,15 +146,19 @@ async def refresh_token(
 @router.post("/change-password", response_model=ChangePasswordResponse, status_code=status.HTTP_200_OK)
 async def change_password(
     request: ChangePasswordRequest,
-    current_user: dict = Depends(lambda: {}),  # TODO: Implement
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Change password (first login or update)
     """
+    from src.core.dependencies import get_current_user
+    from uuid import UUID
+    
     auth_service = AuthService(db)
     result = auth_service.change_password(
-        user_id=current_user.get("user_id"),
+        user_id=UUID(current_user["user_id"]),
+        user_type=current_user.get("user_type", "tenant_user"),
         current_password=request.current_password,
         new_password=request.new_password,
         confirm_password=request.confirm_password,

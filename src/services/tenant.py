@@ -1,14 +1,17 @@
 """
-Tenant service
+Tenant service - updated for new model structure
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func
 from typing import Optional, Dict, Any, List
 from uuid import UUID
-from sqlalchemy import func
 
-from src.models.database import Tenant, TenantDomain, StudentAccount, TutorAccount, AdministratorAccount, QuizSession
+from src.models.database import (
+    Tenant, TenantDomain, UserAccount, TenantAdminAccount, 
+    SystemAdminAccount, QuizSession, UserSubjectRole
+)
 from src.core.exceptions import NotFoundError, BadRequestError
-from src.models.user import TenantStatus
+from src.models.user import TenantStatus, DomainStatus, UserRole, AssignmentStatus
 
 
 class TenantService:
@@ -22,15 +25,17 @@ class TenantService:
         Resolve tenant from domain
         """
         tenant_domain = self.db.query(TenantDomain).filter(
-            TenantDomain.domain == domain,
-            TenantDomain.status == "active",
+            and_(
+                TenantDomain.domain == domain,
+                TenantDomain.status == DomainStatus.ACTIVE
+            )
         ).first()
         
         if not tenant_domain:
             return None
         
         tenant = tenant_domain.tenant
-        if tenant.status.value != "active":
+        if tenant.status != TenantStatus.ACTIVE:
             return None
         
         return {
@@ -40,7 +45,7 @@ class TenantService:
             "tenant_name": tenant.name,
             "is_primary": tenant_domain.is_primary,
             "tenant_status": tenant.status.value,
-            "domain_status": tenant_domain.status,
+            "domain_status": tenant_domain.status.value,
         }
     
     def list_tenants(
@@ -56,24 +61,36 @@ class TenantService:
         
         if search:
             query = query.filter(
-                (Tenant.name.ilike(f"%{search}%")) |
-                (Tenant.tenant_code.ilike(f"%{search}%"))
+                or_(
+                    Tenant.name.ilike(f"%{search}%"),
+                    Tenant.tenant_code.ilike(f"%{search}%")
+                )
             )
         
         tenants = query.order_by(Tenant.created_at.desc()).all()
         
         result = []
         for tenant in tenants:
-            student_count = self.db.query(func.count(StudentAccount.student_id)).filter(
-                StudentAccount.tenant_id == tenant.tenant_id,
+            # Count students (users with student role)
+            student_count = self.db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+                and_(
+                    UserSubjectRole.tenant_id == tenant.tenant_id,
+                    UserSubjectRole.role == UserRole.STUDENT,
+                    UserSubjectRole.status == AssignmentStatus.ACTIVE
+                )
             ).scalar() or 0
             
-            tutor_count = self.db.query(func.count(TutorAccount.tutor_id)).filter(
-                TutorAccount.tenant_id == tenant.tenant_id,
+            # Count tutors (users with tutor role)
+            tutor_count = self.db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+                and_(
+                    UserSubjectRole.tenant_id == tenant.tenant_id,
+                    UserSubjectRole.role == UserRole.TUTOR,
+                    UserSubjectRole.status == AssignmentStatus.ACTIVE
+                )
             ).scalar() or 0
             
             result.append({
-                "tenant_id": tenant.tenant_id,
+                "tenant_id": str(tenant.tenant_id),
                 "tenant_code": tenant.tenant_code,
                 "name": tenant.name,
                 "status": tenant.status.value,
@@ -96,37 +113,45 @@ class TenantService:
         
         # Get domains
         domains = self.db.query(TenantDomain).filter(
-            TenantDomain.tenant_id == tenant_id,
+            TenantDomain.tenant_id == tenant_id
         ).all()
         
         domain_list = []
         for domain in domains:
             domain_list.append({
-                "domain_id": domain.domain_id,
+                "domain_id": str(domain.domain_id),
                 "domain": domain.domain,
                 "is_primary": domain.is_primary,
-                "status": domain.status,
+                "status": domain.status.value,
             })
         
         # Get statistics
-        student_count = self.db.query(func.count(StudentAccount.student_id)).filter(
-            StudentAccount.tenant_id == tenant_id,
+        student_count = self.db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+            and_(
+                UserSubjectRole.tenant_id == tenant_id,
+                UserSubjectRole.role == UserRole.STUDENT,
+                UserSubjectRole.status == AssignmentStatus.ACTIVE
+            )
         ).scalar() or 0
         
-        tutor_count = self.db.query(func.count(TutorAccount.tutor_id)).filter(
-            TutorAccount.tenant_id == tenant_id,
+        tutor_count = self.db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+            and_(
+                UserSubjectRole.tenant_id == tenant_id,
+                UserSubjectRole.role == UserRole.TUTOR,
+                UserSubjectRole.status == AssignmentStatus.ACTIVE
+            )
         ).scalar() or 0
         
-        admin_count = self.db.query(func.count(AdministratorAccount.admin_id)).filter(
-            AdministratorAccount.tenant_id == tenant_id,
+        admin_count = self.db.query(func.count(TenantAdminAccount.tenant_admin_id)).filter(
+            TenantAdminAccount.tenant_id == tenant_id
         ).scalar() or 0
         
         session_count = self.db.query(func.count(QuizSession.session_id)).filter(
-            QuizSession.tenant_id == tenant_id,
+            QuizSession.tenant_id == tenant_id
         ).scalar() or 0
         
         return {
-            "tenant_id": tenant.tenant_id,
+            "tenant_id": str(tenant.tenant_id),
             "tenant_code": tenant.tenant_code,
             "name": tenant.name,
             "description": tenant.description,
@@ -168,7 +193,7 @@ class TenantService:
         
         # Check if domains already exist
         existing_domains = self.db.query(TenantDomain).filter(
-            TenantDomain.domain.in_(domains),
+            TenantDomain.domain.in_(domains)
         ).all()
         if existing_domains:
             raise BadRequestError("One or more domains already in use")
@@ -194,7 +219,8 @@ class TenantService:
                 tenant_id=tenant.tenant_id,
                 domain=domain,
                 is_primary=(domain == primary_domain),
-                status="active",
+                status=DomainStatus.ACTIVE,
+                created_by=created_by,
             )
             self.db.add(domain_obj)
         
@@ -202,7 +228,7 @@ class TenantService:
         self.db.refresh(tenant)
         
         return {
-            "tenant_id": tenant.tenant_id,
+            "tenant_id": str(tenant.tenant_id),
             "tenant_code": tenant.tenant_code,
             "name": tenant.name,
             "status": tenant.status.value,
@@ -226,7 +252,7 @@ class TenantService:
         self.db.refresh(tenant)
         
         return {
-            "tenant_id": tenant.tenant_id,
+            "tenant_id": str(tenant.tenant_id),
             "status": tenant.status.value,
             "updated_at": tenant.updated_at,
         }
@@ -236,6 +262,7 @@ class TenantService:
         tenant_id: UUID,
         domain: str,
         is_primary: bool = False,
+        created_by: Optional[UUID] = None,
     ) -> Dict[str, Any]:
         """Add domain to tenant"""
         tenant = self.db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
@@ -250,8 +277,10 @@ class TenantService:
         # If setting as primary, unset other primary domains
         if is_primary:
             self.db.query(TenantDomain).filter(
-                TenantDomain.tenant_id == tenant_id,
-                TenantDomain.is_primary == True,
+                and_(
+                    TenantDomain.tenant_id == tenant_id,
+                    TenantDomain.is_primary == True
+                )
             ).update({"is_primary": False})
             tenant.primary_domain = domain
         
@@ -259,7 +288,8 @@ class TenantService:
             tenant_id=tenant_id,
             domain=domain,
             is_primary=is_primary,
-            status="active",
+            status=DomainStatus.ACTIVE,
+            created_by=created_by,
         )
         
         self.db.add(domain_obj)
@@ -267,11 +297,11 @@ class TenantService:
         self.db.refresh(domain_obj)
         
         return {
-            "domain_id": domain_obj.domain_id,
-            "tenant_id": tenant_id,
+            "domain_id": str(domain_obj.domain_id),
+            "tenant_id": str(tenant_id),
             "domain": domain,
             "is_primary": is_primary,
-            "status": domain_obj.status,
+            "status": domain_obj.status.value,
             "created_at": domain_obj.created_at,
         }
     
@@ -281,24 +311,32 @@ class TenantService:
         if not tenant:
             raise NotFoundError("Tenant not found")
         
-        student_count = self.db.query(func.count(StudentAccount.student_id)).filter(
-            StudentAccount.tenant_id == tenant_id,
+        student_count = self.db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+            and_(
+                UserSubjectRole.tenant_id == tenant_id,
+                UserSubjectRole.role == UserRole.STUDENT,
+                UserSubjectRole.status == AssignmentStatus.ACTIVE
+            )
         ).scalar() or 0
         
-        tutor_count = self.db.query(func.count(TutorAccount.tutor_id)).filter(
-            TutorAccount.tenant_id == tenant_id,
+        tutor_count = self.db.query(func.count(func.distinct(UserSubjectRole.user_id))).filter(
+            and_(
+                UserSubjectRole.tenant_id == tenant_id,
+                UserSubjectRole.role == UserRole.TUTOR,
+                UserSubjectRole.status == AssignmentStatus.ACTIVE
+            )
         ).scalar() or 0
         
-        admin_count = self.db.query(func.count(AdministratorAccount.admin_id)).filter(
-            AdministratorAccount.tenant_id == tenant_id,
+        admin_count = self.db.query(func.count(TenantAdminAccount.tenant_admin_id)).filter(
+            TenantAdminAccount.tenant_id == tenant_id
         ).scalar() or 0
         
         session_count = self.db.query(func.count(QuizSession.session_id)).filter(
-            QuizSession.tenant_id == tenant_id,
+            QuizSession.tenant_id == tenant_id
         ).scalar() or 0
         
         return {
-            "tenant_id": tenant_id,
+            "tenant_id": str(tenant_id),
             "tenant_code": tenant.tenant_code,
             "users": {
                 "total_students": student_count,
@@ -316,4 +354,3 @@ class TenantService:
                 "completion_rate": 0.0,  # TODO: Calculate
             },
         }
-
