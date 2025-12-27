@@ -54,11 +54,40 @@ async def get_subject(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_subject(
     request: CreateSubjectRequest,
-    current_user: dict = Depends(require_system_admin),
+    current_user: dict = Depends(require_tenant_admin),
     db: Session = Depends(get_db),
 ):
-    """Create subject (admin only)"""
+    """Create subject (tenant admin or system admin only)"""
     subject_service = SubjectService(db)
+    
+    # Get created_by from current user
+    created_by = UUID(current_user["user_id"])
+    
+    # Handle metadata conversion
+    metadata_dict = None
+    if request.metadata:
+        if hasattr(request.metadata, 'model_dump'):
+            # Pydantic v2 - exclude None values
+            metadata_dict = request.metadata.model_dump(exclude_none=True)
+        elif hasattr(request.metadata, 'dict'):
+            # Pydantic v1 - exclude None values
+            metadata_dict = request.metadata.dict(exclude_none=True)
+        else:
+            metadata_dict = request.metadata
+        
+        # If metadata_dict is empty after excluding None values, set to None
+        if not metadata_dict:
+            metadata_dict = None
+    
+    # Handle settings conversion
+    settings_dict = None
+    if request.settings:
+        if hasattr(request.settings, 'model_dump'):
+            settings_dict = request.settings.model_dump()
+        elif hasattr(request.settings, 'dict'):
+            settings_dict = request.settings.dict()
+        else:
+            settings_dict = request.settings
     
     result = subject_service.create_subject(
         subject_code=request.subject_code,
@@ -68,8 +97,9 @@ async def create_subject(
         grade_levels=request.grade_levels,
         supported_question_types=request.supported_question_types,
         answer_validation_method=request.answer_validation_method,
-        settings=request.settings.dict() if hasattr(request.settings, 'dict') else request.settings,
-        metadata=request.metadata.dict() if hasattr(request.metadata, 'dict') else request.metadata,
+        settings=settings_dict,
+        metadata=metadata_dict,
+        created_by=created_by,
     )
     
     return result
@@ -79,10 +109,10 @@ async def create_subject(
 async def update_subject(
     subject_id: UUID,
     request: UpdateSubjectRequest,
-    current_user: dict = Depends(require_system_admin),
+    current_user: dict = Depends(require_tenant_admin),
     db: Session = Depends(get_db),
 ):
-    """Update subject (admin only)"""
+    """Update subject (tenant admin or system admin only)"""
     subject_service = SubjectService(db)
     
     result = subject_service.update_subject(
@@ -102,10 +132,10 @@ async def update_subject(
 @router.post("/{subject_id}/deactivate", status_code=status.HTTP_200_OK)
 async def deactivate_subject(
     subject_id: UUID,
-    current_user: dict = Depends(require_system_admin),
+    current_user: dict = Depends(require_tenant_admin),
     db: Session = Depends(get_db),
 ):
-    """Deactivate subject (admin only) - cannot deactivate default subject"""
+    """Deactivate subject (tenant admin or system admin only) - cannot deactivate default subject"""
     subject_service = SubjectService(db)
     
     # Check if it's the default subject before attempting deactivation

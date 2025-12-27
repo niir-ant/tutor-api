@@ -94,6 +94,7 @@ class SubjectService:
         answer_validation_method: str,
         settings: Optional[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]],
+        created_by: Optional[UUID] = None,
     ) -> Dict[str, Any]:
         """Create a new subject"""
         # Check if subject_code already exists
@@ -111,7 +112,8 @@ class SubjectService:
             supported_question_types=supported_question_types,
             answer_validation_method=answer_validation_method,
             settings=settings,
-            metadata=metadata,
+            extra_metadata=metadata,  # Use extra_metadata (Python attr name) not metadata
+            created_by=created_by,
         )
         
         self.db.add(subject)

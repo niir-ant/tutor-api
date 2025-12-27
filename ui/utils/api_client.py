@@ -268,6 +268,74 @@ class APIClient:
         response = self.session.get(url, headers=self._get_headers())
         return self._handle_response(response)
     
+    def create_subject(
+        self,
+        subject_code: str,
+        name: str,
+        description: str = None,
+        type: str = None,
+        grade_levels: List[int] = None,
+        supported_question_types: List[str] = None,
+        answer_validation_method: str = None,
+        settings: Dict[str, Any] = None,
+        metadata: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        """Create subject (system admin only)"""
+        url = f"{self.base_url}/subjects"
+        data = {
+            "subject_code": subject_code,
+            "name": name,
+        }
+        if description:
+            data["description"] = description
+        if type:
+            data["type"] = type
+        if grade_levels:
+            data["grade_levels"] = grade_levels
+        if supported_question_types:
+            data["supported_question_types"] = supported_question_types
+        if answer_validation_method:
+            data["answer_validation_method"] = answer_validation_method
+        if settings:
+            data["settings"] = settings
+        if metadata:
+            data["metadata"] = metadata
+        
+        response = self.session.post(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def update_subject(
+        self,
+        subject_id: str,
+        name: str = None,
+        description: str = None,
+        grade_levels: List[int] = None,
+        status: str = None,
+        supported_question_types: List[str] = None,
+        settings: Dict[str, Any] = None,
+        metadata: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        """Update subject (system admin only)"""
+        url = f"{self.base_url}/subjects/{subject_id}"
+        data = {}
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+        if grade_levels is not None:
+            data["grade_levels"] = grade_levels
+        if status is not None:
+            data["status"] = status
+        if supported_question_types is not None:
+            data["supported_question_types"] = supported_question_types
+        if settings is not None:
+            data["settings"] = settings
+        if metadata is not None:
+            data["metadata"] = metadata
+        
+        response = self.session.put(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
     # Competition endpoints
     def list_competitions(self, subject_id: str = None, status: str = None) -> Dict[str, Any]:
         """List competitions"""
@@ -640,7 +708,7 @@ class APIClient:
 # Create a singleton instance
 # Version parameter helps force cache refresh when code changes
 @st.cache_resource(show_spinner=False)
-def get_api_client(_version: int = 2) -> APIClient:
+def get_api_client(_version: int = 3) -> APIClient:
     """Get API client instance
     
     Args:
