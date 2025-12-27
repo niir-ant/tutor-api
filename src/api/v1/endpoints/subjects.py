@@ -105,8 +105,17 @@ async def deactivate_subject(
     current_user: dict = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ):
-    """Deactivate subject (admin only)"""
+    """Deactivate subject (admin only) - cannot deactivate default subject"""
     subject_service = SubjectService(db)
+    
+    # Check if it's the default subject before attempting deactivation
+    from src.core.subject_utils import is_default_subject
+    if is_default_subject(subject_id, db):
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot deactivate the default subject. It is required for system operation."
+        )
     
     result = subject_service.update_subject(subject_id=subject_id, status="inactive")
     

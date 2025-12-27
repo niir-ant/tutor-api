@@ -8,11 +8,11 @@ from uuid import UUID
 from datetime import datetime
 
 from src.models.database import (
-    UserAccount, UserSubjectRole, StudentSubjectProfile, StudentTutorAssignment
+    UserAccount, UserSubjectRole, StudentSubjectProfile, StudentTutorAssignment, Subject
 )
 from src.core.exceptions import NotFoundError, BadRequestError
 from src.core.security import get_password_hash
-from src.models.user import AccountStatus, UserRole, AssignmentStatus
+from src.models.user import AccountStatus, UserRole, AssignmentStatus, SubjectStatus, SubjectType, ValidationMethod
 
 
 class StudentService:
@@ -20,6 +20,31 @@ class StudentService:
     
     def __init__(self, db: Session):
         self.db = db
+    
+    def _get_or_create_default_subject(self, created_by: Optional[UUID] = None) -> Subject:
+        """Get or create the default subject for the system"""
+        # Check if default subject exists
+        default_subject = self.db.query(Subject).filter(
+            Subject.subject_code == "DEFAULT"
+        ).first()
+        
+        if not default_subject:
+            # Create default subject
+            default_subject = Subject(
+                subject_code="DEFAULT",
+                name="Default Subject",
+                description="Default subject created automatically for new users",
+                type=SubjectType.OTHER,
+                status=SubjectStatus.ACTIVE,
+                supported_question_types=["multiple_choice", "short_answer", "true_false"],
+                answer_validation_method=ValidationMethod.EXACT_MATCH,
+                grade_levels=None,  # Support all grade levels
+                created_by=created_by,
+            )
+            self.db.add(default_subject)
+            self.db.flush()  # Flush to get subject_id
+        
+        return default_subject
     
     def create_student(
         self,
@@ -64,7 +89,23 @@ class StudentService:
         self.db.add(user)
         self.db.flush()  # Flush to get user_id
         
+        # Get or create default subject and assign user to it
+        subject = self._get_or_create_default_subject(created_by=created_by)
+        subject_role = UserSubjectRole(
+            user_id=user.user_id,
+            tenant_id=tenant_id,
+            subject_id=subject.subject_id,
+            role=UserRole.STUDENT,
+            status=AssignmentStatus.ACTIVE,
+            assigned_by=created_by if created_by else user.user_id,  # Use user_id as fallback
+        )
+        self.db.add(subject_role)
+        
         # TODO: Send activation email if requested
+        
+        # Commit the transaction to save the user and role
+        self.db.commit()
+        self.db.refresh(user)  # Refresh to get created_at timestamp
         
         result = {
             "user_id": str(user.user_id),

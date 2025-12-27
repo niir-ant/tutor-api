@@ -17,6 +17,18 @@ def render_tenant_admin():
     with tab1:
         st.subheader("Create New Account")
         
+        # Display success message and password from session state if available
+        if st.session_state.get("account_creation_success"):
+            st.success("✅ Account created successfully!")
+            temp_password = st.session_state.get("account_temp_password")
+            if temp_password:
+                st.info(f"🔑 Temporary password: **{temp_password}**")
+                st.warning("⚠️ IMPORTANT: Please save this password - it won't be shown again!")
+            # Clear the session state after displaying
+            del st.session_state["account_creation_success"]
+            if "account_temp_password" in st.session_state:
+                del st.session_state["account_temp_password"]
+        
         account_type = st.radio("Account Type", ["Student", "Tutor"])
         
         with st.form("create_account_form"):
@@ -33,25 +45,39 @@ def render_tenant_admin():
             send_activation_email = st.checkbox("Send activation email")
             
             if st.form_submit_button("Create Account"):
-                if account_type == "Student":
-                    result = api_client.create_student_account(
-                        username, email, grade_level, send_activation_email
-                    )
+                # Validate required fields
+                if not username or not email:
+                    st.error("❌ Username and email are required")
+                elif account_type == "Tutor" and not name:
+                    st.error("❌ Name is required for tutor accounts")
                 else:
-                    if not name:
-                        st.error("Name is required for tutor accounts")
-                    else:
-                        result = api_client.create_tutor_account(
-                            username, email, name, send_activation_email
-                        )
-                
-                if result:
-                    st.success("✅ Account created successfully!")
-                    if result.get("temporary_password"):
-                        st.info(f"🔑 Temporary password: **{result['temporary_password']}**")
-                        st.warning("⚠️ IMPORTANT: Please save this password - it won't be shown again!")
-                else:
-                    st.error("❌ Failed to create account. Please check the form and try again.")
+                    # Create account
+                    with st.spinner("Creating account..."):
+                        if account_type == "Student":
+                            result = api_client.create_student_account(
+                                username, email, grade_level, send_activation_email
+                            )
+                        else:
+                            result = api_client.create_tutor_account(
+                                username, email, name, send_activation_email
+                            )
+                        
+                        # Check result - _handle_response returns error dict or success data
+                        if result and not result.get("error"):
+                            # Store success and password in session state for display after rerun
+                            st.session_state["account_creation_success"] = True
+                            if result.get("temporary_password"):
+                                st.session_state["account_temp_password"] = result["temporary_password"]
+                            # Rerun to show the success message and clear the form
+                            st.rerun()
+                        elif result and result.get("error"):
+                            # Error message already displayed by _handle_response, but show detail if available
+                            if result.get("detail"):
+                                # Don't show duplicate - _handle_response already showed it
+                                pass
+                        else:
+                            # Empty result shouldn't happen, but handle it
+                            st.error("❌ Failed to create account. Please try again.")
     
     with tab2:
         st.subheader("All Accounts")

@@ -33,12 +33,14 @@ class APIClient:
                     del st.session_state["access_token"]
                 if "user_info" in st.session_state:
                     del st.session_state["user_info"]
-                st.error("Session expired. Please login again.")
+                error_msg = "Session expired. Please login again."
+                st.error(error_msg)
                 st.rerun()
-                return {}
+                return {"error": True, "detail": error_msg, "status_code": 401}
             elif response.status_code == 403:
-                st.error("You don't have permission to perform this action.")
-                return {}
+                error_msg = "You don't have permission to perform this action."
+                st.error(error_msg)
+                return {"error": True, "detail": error_msg, "status_code": 403}
             else:
                 error_msg = "An error occurred"
                 try:
@@ -47,10 +49,11 @@ class APIClient:
                 except:
                     error_msg = response.text or error_msg
                 st.error(f"Error: {error_msg}")
-                return {}
+                return {"error": True, "detail": error_msg, "status_code": response.status_code}
         except Exception as e:
-            st.error(f"Error processing response: {str(e)}")
-            return {}
+            error_msg = f"Error processing response: {str(e)}"
+            st.error(error_msg)
+            return {"error": True, "detail": error_msg, "status_code": 500}
     
     # Authentication endpoints
     def login(self, username: str, password: str, domain: str = None) -> Dict[str, Any]:

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from src.models.database import Subject
 from src.core.exceptions import NotFoundError, BadRequestError
+from src.core.subject_utils import is_default_subject
 
 
 class SubjectService:
@@ -141,6 +142,10 @@ class SubjectService:
         
         if not subject:
             raise NotFoundError("Subject not found")
+        
+        # Prevent deactivating the default subject
+        if status is not None and status != "active" and subject.subject_code == "DEFAULT":
+            raise BadRequestError("Cannot deactivate the default subject. It is required for system operation.")
         
         if name is not None:
             subject.name = name
