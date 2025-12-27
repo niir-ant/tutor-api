@@ -41,7 +41,7 @@ class ProgressService:
         # Get or create progress record
         progress = self.db.query(StudentProgress).filter(
             and_(
-                StudentProgress.student_id == student_id,
+            StudentProgress.student_id == student_id,
                 StudentProgress.tenant_id == tenant_id
             )
         ).first()
@@ -62,7 +62,7 @@ class ProgressService:
             func.avg(AnswerSubmission.score).label("avg_score"),
         ).filter(
             and_(
-                AnswerSubmission.student_id == student_id,
+            AnswerSubmission.student_id == student_id,
                 AnswerSubmission.tenant_id == tenant_id
             )
         )

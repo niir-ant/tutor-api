@@ -82,7 +82,14 @@ class AuthService:
             return None
         
         # Check account status
-        account_status = user.account_status.value if hasattr(user.account_status, 'value') else str(user.account_status)
+        # Handle enum conversion - SQLAlchemy might return enum or string
+        if hasattr(user.account_status, 'value'):
+            account_status = user.account_status.value
+        elif isinstance(user.account_status, str):
+            account_status = user.account_status
+        else:
+            account_status = str(user.account_status)
+        
         if account_status not in ["active", "pending_activation"]:
             return None
         
@@ -100,15 +107,20 @@ class AuthService:
             else:
                 # Check subject roles to determine if student or tutor
                 # For login, we'll use the first active role found, or default to student
+                from src.models.user import AssignmentStatus
                 subject_role = self.db.query(UserSubjectRole).filter(
                     and_(
                         UserSubjectRole.user_id == user.user_id,
-                        UserSubjectRole.status == "active"
+                        UserSubjectRole.status == AssignmentStatus.ACTIVE
                     )
                 ).first()
                 
                 if subject_role:
-                    role = subject_role.role.value
+                    # Handle enum - could be enum instance or value
+                    if hasattr(subject_role.role, 'value'):
+                        role = subject_role.role.value
+                    else:
+                        role = str(subject_role.role)
                 else:
                     # No subject role assigned yet - default to student
                     role = UserRole.STUDENT.value
@@ -252,8 +264,8 @@ class AuthService:
         # Find valid OTP
         otp_record = self.db.query(PasswordResetOTP).filter(
             and_(
-                PasswordResetOTP.email == email,
-                PasswordResetOTP.used == False,
+            PasswordResetOTP.email == email,
+            PasswordResetOTP.used == False,
                 PasswordResetOTP.expires_at > datetime.utcnow()
             )
         ).order_by(PasswordResetOTP.created_at.desc()).first()

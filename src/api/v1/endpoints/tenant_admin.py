@@ -121,7 +121,7 @@ async def get_account(
         "email": user.email,
         "role": role,
         "status": user.account_status.value,
-    }
+        }
 
 
 @router.put("/accounts/{account_id}/status", status_code=status.HTTP_200_OK)
@@ -145,8 +145,8 @@ async def update_account_status(
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
     
-    account.account_status = AccountStatus(status)
-    db.commit()
+        account.account_status = AccountStatus(status)
+        db.commit()
     return {"account_id": str(account_id), "status": status}
 
 
@@ -230,15 +230,15 @@ async def assign_student_to_tutor(
     # Check if assignment already exists
     existing = db.query(StudentTutorAssignment).filter(
         and_(
-            StudentTutorAssignment.student_id == request.student_id,
-            StudentTutorAssignment.tutor_id == request.tutor_id,
-            StudentTutorAssignment.tenant_id == tenant_id,
+        StudentTutorAssignment.student_id == request.student_id,
+        StudentTutorAssignment.tutor_id == request.tutor_id,
+        StudentTutorAssignment.tenant_id == tenant_id,
             StudentTutorAssignment.status == AssignmentStatus.ACTIVE
         )
     ).first()
     
     if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignment already exists")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignment already exists")
     
     # Create assignment (need subject_id - for now use first subject)
     # TODO: Make subject_id required or get from request
@@ -280,7 +280,7 @@ async def remove_assignment(
     
     assignment = db.query(StudentTutorAssignment).filter(
         and_(
-            StudentTutorAssignment.assignment_id == assignment_id,
+        StudentTutorAssignment.assignment_id == assignment_id,
             StudentTutorAssignment.tenant_id == tenant_id
         )
     ).first()

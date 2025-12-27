@@ -38,9 +38,9 @@ class MessageService:
             # Student can only message their assigned tutor
             assignment = self.db.query(StudentTutorAssignment).filter(
                 and_(
-                    StudentTutorAssignment.student_id == sender_id,
-                    StudentTutorAssignment.tutor_id == recipient_id,
-                    StudentTutorAssignment.tenant_id == tenant_id,
+                StudentTutorAssignment.student_id == sender_id,
+                StudentTutorAssignment.tutor_id == recipient_id,
+                StudentTutorAssignment.tenant_id == tenant_id,
                     StudentTutorAssignment.status == "active"
                 )
             ).first()
@@ -53,9 +53,9 @@ class MessageService:
             # Tutor can message assigned students
             assignment = self.db.query(StudentTutorAssignment).filter(
                 and_(
-                    StudentTutorAssignment.tutor_id == sender_id,
-                    StudentTutorAssignment.student_id == recipient_id,
-                    StudentTutorAssignment.tenant_id == tenant_id,
+                StudentTutorAssignment.tutor_id == sender_id,
+                StudentTutorAssignment.student_id == recipient_id,
+                StudentTutorAssignment.tenant_id == tenant_id,
                     StudentTutorAssignment.status == "active"
                 )
             ).first()
@@ -133,7 +133,7 @@ class MessageService:
         """Get messages for a user"""
         query = self.db.query(Message).filter(
             and_(
-                Message.tenant_id == tenant_id,
+            Message.tenant_id == tenant_id,
                 Message.deleted_at.is_(None)
             )
         ).filter(
@@ -176,9 +176,9 @@ class MessageService:
         
         unread_count = self.db.query(Message).filter(
             and_(
-                Message.tenant_id == tenant_id,
-                Message.recipient_id == user_id,
-                Message.read_at.is_(None),
+            Message.tenant_id == tenant_id,
+            Message.recipient_id == user_id,
+            Message.read_at.is_(None),
                 Message.deleted_at.is_(None)
             )
         ).count()
@@ -224,8 +224,8 @@ class MessageService:
         """Mark message as read"""
         message = self.db.query(Message).filter(
             and_(
-                Message.message_id == message_id,
-                Message.tenant_id == tenant_id,
+            Message.message_id == message_id,
+            Message.tenant_id == tenant_id,
                 Message.recipient_id == user_id
             )
         ).first()
@@ -253,9 +253,9 @@ class MessageService:
         """Mark all messages in conversation as read"""
         count = self.db.query(Message).filter(
             and_(
-                Message.tenant_id == tenant_id,
-                Message.recipient_id == user_id,
-                Message.sender_id == other_user_id,
+            Message.tenant_id == tenant_id,
+            Message.recipient_id == user_id,
+            Message.sender_id == other_user_id,
                 Message.read_at.is_(None)
             )
         ).update({
@@ -274,7 +274,7 @@ class MessageService:
         """Delete a message (soft delete)"""
         message = self.db.query(Message).filter(
             and_(
-                Message.message_id == message_id,
+            Message.message_id == message_id,
                 Message.tenant_id == tenant_id
             )
         ).filter(
@@ -314,7 +314,7 @@ class MessageService:
             return {"name": "Unknown", "role": role or "unknown"}
         
         if role == "student":
-            return {"name": user.username, "role": "student"}
+                return {"name": user.username, "role": "student"}
         elif role == "tutor":
             # Get tutor name from profile
             profile = self.db.query(TutorSubjectProfile).filter(

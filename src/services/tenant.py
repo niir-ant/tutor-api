@@ -26,7 +26,7 @@ class TenantService:
         """
         tenant_domain = self.db.query(TenantDomain).filter(
             and_(
-                TenantDomain.domain == domain,
+            TenantDomain.domain == domain,
                 TenantDomain.status == DomainStatus.ACTIVE
             )
         ).first()
@@ -278,7 +278,7 @@ class TenantService:
         if is_primary:
             self.db.query(TenantDomain).filter(
                 and_(
-                    TenantDomain.tenant_id == tenant_id,
+                TenantDomain.tenant_id == tenant_id,
                     TenantDomain.is_primary == True
                 )
             ).update({"is_primary": False})

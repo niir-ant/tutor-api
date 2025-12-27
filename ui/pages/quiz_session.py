@@ -367,7 +367,7 @@ def show_quiz_results():
                     if q_data.get('feedback'):
                         st.write(f"**Feedback:** {q_data['feedback']}")
     else:
-        st.info("Detailed question review will be displayed here once the API endpoint is fully implemented.")
+    st.info("Detailed question review will be displayed here once the API endpoint is fully implemented.")
     
     # Action buttons (UX-3.5)
     st.markdown("---")
@@ -391,10 +391,10 @@ def show_quiz_results():
             st.rerun()
     
     with col3:
-        if st.button("🏠 Back to Dashboard", use_container_width=True):
-            st.session_state["quiz_results"] = None
-            st.session_state["current_question_index"] = 0
-            st.session_state["session_questions"] = []
+    if st.button("🏠 Back to Dashboard", use_container_width=True):
+        st.session_state["quiz_results"] = None
+        st.session_state["current_question_index"] = 0
+        st.session_state["session_questions"] = []
             st.session_state["current_session_id"] = None
-            st.rerun()
+        st.rerun()
 

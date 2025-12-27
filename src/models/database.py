@@ -1,8 +1,9 @@
 """
 SQLAlchemy database models matching the SQL schema in db/migration/0.0.10__initial_schema.sql
 """
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Enum as SQLEnum, DECIMAL
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+import re
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, DECIMAL, TypeDecorator
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, ENUM
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from enum import Enum
@@ -15,6 +16,87 @@ from src.models.user import (
     AssignmentStatus, CompetitionSessionStatus, VisibilityType, SubjectType, 
     SubjectStatus, DomainStatus, ValidationMethod
 )
+
+
+def _enum_name(enum_class: type) -> str:
+    """
+    Derive PostgreSQL enum type name from Python enum class name.
+    Converts CamelCase to snake_case (e.g., AccountStatus -> account_status).
+    """
+    # Convert CamelCase to snake_case
+    name = enum_class.__name__
+    name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name)
+    return name.lower()
+
+
+class EnumType(TypeDecorator):
+    """
+    TypeDecorator that wraps PostgreSQL native ENUM and properly handles
+    conversion between database enum values and Python str-based Enum instances.
+    """
+    impl = String
+    cache_ok = True
+    
+    def __init__(self, enum_class: type):
+        super().__init__()
+        self.enum_class = enum_class
+        # Create the underlying PostgreSQL ENUM type
+        enum_values = [member.value for member in enum_class]
+        self.pg_enum = ENUM(
+            *enum_values,
+            name=_enum_name(enum_class),
+            schema="tutor",
+            create_type=False
+        )
+    
+    def load_dialect_impl(self, dialect):
+        """Use PostgreSQL ENUM for PostgreSQL, String for others"""
+        if dialect.name == 'postgresql':
+            return self.pg_enum
+        return self.impl
+    
+    def process_bind_param(self, value, dialect):
+        """Convert Python enum to database value"""
+        if value is None:
+            return None
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, str):
+            # Validate that the string is a valid enum value
+            try:
+                return self.enum_class(value).value
+            except ValueError:
+                return value
+        return str(value)
+    
+    def process_result_value(self, value, dialect):
+        """Convert database value to Python enum"""
+        if value is None:
+            return None
+        if isinstance(value, self.enum_class):
+            return value
+        # Convert string value to enum instance
+        try:
+            return self.enum_class(value)
+        except (ValueError, KeyError):
+            # If value doesn't match any enum member, try to find by value
+            for member in self.enum_class:
+                if member.value == value:
+                    return member
+            raise ValueError(f"Invalid enum value: {value}")
+
+
+def pg_enum(enum_class: type):
+    """
+    Create PostgreSQL native ENUM type for the given enum class.
+    Assumes the enum type already exists in the database (create_type=False).
+    Uses stable naming: schema='tutor', name derived from enum class name.
+    
+    Returns a TypeDecorator that properly handles conversion between
+    database enum values and Python str-based Enum instances.
+    """
+    return EnumType(enum_class)
 
 
 class UserType(str, Enum):
@@ -32,7 +114,7 @@ class Tenant(Base):
     tenant_code = Column(String(100), unique=True, nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    status = Column(SQLEnum(TenantStatus, native_enum=True, create_type=False), nullable=False, default=TenantStatus.ACTIVE)
+    status = Column(pg_enum(TenantStatus), nullable=False, default=TenantStatus.ACTIVE)
     primary_domain = Column(String(255))
     contact_info = Column(JSONB)
     settings = Column(JSONB)
@@ -54,7 +136,7 @@ class TenantDomain(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tutor.tenants.tenant_id"), nullable=False)
     domain = Column(String(255), nullable=False, unique=True)
     is_primary = Column(Boolean, nullable=False, default=False)
-    status = Column(SQLEnum(DomainStatus, native_enum=True, create_type=False), nullable=False, default=DomainStatus.ACTIVE)
+    status = Column(pg_enum(DomainStatus), nullable=False, default=DomainStatus.ACTIVE)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = Column(UUID(as_uuid=True))
@@ -72,11 +154,11 @@ class Subject(Base):
     subject_code = Column(String(100), unique=True, nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    type = Column(SQLEnum(SubjectType, native_enum=True, create_type=False), nullable=False)
+    type = Column(pg_enum(SubjectType), nullable=False)
     grade_levels = Column(ARRAY(Integer))
-    status = Column(SQLEnum(SubjectStatus, native_enum=True, create_type=False), nullable=False, default=SubjectStatus.ACTIVE)
+    status = Column(pg_enum(SubjectStatus), nullable=False, default=SubjectStatus.ACTIVE)
     supported_question_types = Column(ARRAY(String), nullable=False)  # Array of question type strings
-    answer_validation_method = Column(SQLEnum(ValidationMethod, native_enum=True, create_type=False), nullable=False)
+    answer_validation_method = Column(pg_enum(ValidationMethod), nullable=False)
     settings = Column(JSONB)
     extra_metadata = Column("metadata", JSONB)  # Use 'metadata' as DB column name, 'extra_metadata' as Python attr
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
@@ -94,7 +176,7 @@ class UserAccount(Base):
     username = Column(String(100), nullable=False)
     email = Column(String(255), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    account_status = Column(SQLEnum(AccountStatus, native_enum=True, create_type=False), nullable=False, default=AccountStatus.PENDING_ACTIVATION)
+    account_status = Column(pg_enum(AccountStatus), nullable=False, default=AccountStatus.PENDING_ACTIVATION)
     requires_password_change = Column(Boolean, nullable=False, default=True)
     failed_login_attempts = Column(Integer, nullable=False, default=0)
     locked_until = Column(DateTime(timezone=True))
@@ -106,7 +188,15 @@ class UserAccount(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="user_accounts")
     subject_roles = relationship("UserSubjectRole", back_populates="user")
-    student_profiles = relationship("StudentSubjectProfile", back_populates="user")
+    # Note: foreign_keys must be specified because StudentSubjectProfile has two FKs to UserAccount
+    # (user_id and assigned_tutor_id). We specify user_id for the student_profiles relationship.
+    # Using primaryjoin to explicitly specify the join condition.
+    student_profiles = relationship(
+        "StudentSubjectProfile", 
+        back_populates="user",
+        primaryjoin="UserAccount.user_id == StudentSubjectProfile.user_id",
+        foreign_keys="[StudentSubjectProfile.user_id]"
+    )
     tutor_profiles = relationship("TutorSubjectProfile", back_populates="user")
     tenant_admin = relationship("TenantAdminAccount", back_populates="user", uselist=False)
 
@@ -120,8 +210,8 @@ class UserSubjectRole(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("tutor.user_accounts.user_id"), nullable=False)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tutor.tenants.tenant_id"), nullable=False)
     subject_id = Column(UUID(as_uuid=True), ForeignKey("tutor.subjects.subject_id"), nullable=False)
-    role = Column(SQLEnum(UserRole, native_enum=True, create_type=False), nullable=False)
-    status = Column(SQLEnum(AssignmentStatus, native_enum=True, create_type=False), nullable=False, default=AssignmentStatus.ACTIVE)
+    role = Column(pg_enum(UserRole), nullable=False)
+    status = Column(pg_enum(AssignmentStatus), nullable=False, default=AssignmentStatus.ACTIVE)
     assigned_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     assigned_by = Column(UUID(as_uuid=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -197,8 +287,8 @@ class SystemAdminAccount(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
-    role = Column(SQLEnum(UserRole, native_enum=True, create_type=False), nullable=False, default=UserRole.SYSTEM_ADMIN)
-    account_status = Column(SQLEnum(AccountStatus, native_enum=True, create_type=False), nullable=False, default=AccountStatus.PENDING_ACTIVATION)
+    role = Column(pg_enum(UserRole), nullable=False, default=UserRole.SYSTEM_ADMIN)
+    account_status = Column(pg_enum(AccountStatus), nullable=False, default=AccountStatus.PENDING_ACTIVATION)
     requires_password_change = Column(Boolean, nullable=False, default=True)
     permissions = Column(ARRAY(String))
     failed_login_attempts = Column(Integer, nullable=False, default=0)
@@ -249,8 +339,8 @@ class Question(Base):
     subject_id = Column(UUID(as_uuid=True), ForeignKey("tutor.subjects.subject_id"), nullable=False)
     subject_code = Column(String(100), nullable=False)
     grade_level = Column(Integer)
-    difficulty = Column(SQLEnum(QuestionDifficulty, native_enum=True, create_type=False), nullable=False)
-    question_type = Column(SQLEnum(QuestionType, native_enum=True, create_type=False), nullable=False)
+    difficulty = Column(pg_enum(QuestionDifficulty), nullable=False)
+    question_type = Column(pg_enum(QuestionType), nullable=False)
     question_text = Column(Text, nullable=False)
     options = Column(JSONB)
     correct_answer = Column(JSONB, nullable=False)
@@ -270,9 +360,9 @@ class QuizSession(Base):
     subject_id = Column(UUID(as_uuid=True), ForeignKey("tutor.subjects.subject_id"), nullable=False)
     subject_code = Column(String(100), nullable=False)
     grade_level = Column(Integer)
-    difficulty = Column(SQLEnum(QuestionDifficulty, native_enum=True, create_type=False))
+    difficulty = Column(pg_enum(QuestionDifficulty))
     questions = Column(ARRAY(UUID(as_uuid=True)), nullable=False)
-    status = Column(SQLEnum(SessionStatus, native_enum=True, create_type=False), nullable=False, default=SessionStatus.IN_PROGRESS)
+    status = Column(pg_enum(SessionStatus), nullable=False, default=SessionStatus.IN_PROGRESS)
     score = Column(DECIMAL(10, 2), nullable=False, default=0)
     max_score = Column(DECIMAL(10, 2), nullable=False, default=0)
     started_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
@@ -334,7 +424,7 @@ class StudentTutorAssignment(Base):
     subject_id = Column(UUID(as_uuid=True), ForeignKey("tutor.subjects.subject_id"), nullable=False)
     student_id = Column(UUID(as_uuid=True), ForeignKey("tutor.user_accounts.user_id"), nullable=False)
     tutor_id = Column(UUID(as_uuid=True), ForeignKey("tutor.user_accounts.user_id"), nullable=False)
-    status = Column(SQLEnum(AssignmentStatus, native_enum=True, create_type=False), nullable=False, default=AssignmentStatus.ACTIVE)
+    status = Column(pg_enum(AssignmentStatus), nullable=False, default=AssignmentStatus.ACTIVE)
     assigned_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     assigned_by = Column(UUID(as_uuid=True), nullable=False)
     deactivated_at = Column(DateTime(timezone=True))
@@ -350,11 +440,11 @@ class Message(Base):
     message_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tutor.tenants.tenant_id"), nullable=False)
     sender_id = Column(UUID(as_uuid=True), nullable=False)
-    sender_role = Column(SQLEnum(UserRole, native_enum=True, create_type=False), nullable=False)
+    sender_role = Column(pg_enum(UserRole), nullable=False)
     recipient_id = Column(UUID(as_uuid=True), nullable=False)
-    recipient_role = Column(SQLEnum(UserRole, native_enum=True, create_type=False), nullable=False)
+    recipient_role = Column(pg_enum(UserRole), nullable=False)
     content = Column(Text, nullable=False)
-    status = Column(SQLEnum(MessageStatus, native_enum=True, create_type=False), nullable=False, default=MessageStatus.SENT)
+    status = Column(pg_enum(MessageStatus), nullable=False, default=MessageStatus.SENT)
     email_sent = Column(Boolean, nullable=False, default=False)
     email_sent_at = Column(DateTime(timezone=True))
     read_at = Column(DateTime(timezone=True))
@@ -377,14 +467,14 @@ class Competition(Base):
     description = Column(Text)
     subject_id = Column(UUID(as_uuid=True), ForeignKey("tutor.subjects.subject_id"), nullable=False)
     subject_code = Column(String(100), nullable=False)
-    status = Column(SQLEnum(CompetitionStatus, native_enum=True, create_type=False), nullable=False, default=CompetitionStatus.UPCOMING)
+    status = Column(pg_enum(CompetitionStatus), nullable=False, default=CompetitionStatus.UPCOMING)
     start_date = Column(DateTime(timezone=True), nullable=False)
     end_date = Column(DateTime(timezone=True), nullable=False)
     registration_start = Column(DateTime(timezone=True), nullable=False)
     registration_end = Column(DateTime(timezone=True), nullable=False)
     rules = Column(JSONB, nullable=False)
     eligibility = Column(JSONB)
-    visibility = Column(SQLEnum(VisibilityType, native_enum=True, create_type=False), nullable=False, default=VisibilityType.PUBLIC)
+    visibility = Column(pg_enum(VisibilityType), nullable=False, default=VisibilityType.PUBLIC)
     max_participants = Column(Integer)
     participant_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
@@ -404,7 +494,7 @@ class CompetitionRegistration(Base):
     competition_id = Column(UUID(as_uuid=True), ForeignKey("tutor.competitions.competition_id"), nullable=False)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tutor.tenants.tenant_id"), nullable=False)
     student_id = Column(UUID(as_uuid=True), ForeignKey("tutor.user_accounts.user_id"), nullable=False)
-    status = Column(SQLEnum(RegistrationStatus, native_enum=True, create_type=False), nullable=False, default=RegistrationStatus.REGISTERED)
+    status = Column(pg_enum(RegistrationStatus), nullable=False, default=RegistrationStatus.REGISTERED)
     registered_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     confirmed_at = Column(DateTime(timezone=True))
     cancelled_at = Column(DateTime(timezone=True))
@@ -431,7 +521,7 @@ class CompetitionSession(Base):
     accuracy = Column(DECIMAL(5, 2))
     completion_time = Column(Integer)
     questions_answered = Column(Integer, nullable=False, default=0)
-    status = Column(SQLEnum(CompetitionSessionStatus, native_enum=True, create_type=False), nullable=False, default=CompetitionSessionStatus.IN_PROGRESS)
+    status = Column(pg_enum(CompetitionSessionStatus), nullable=False, default=CompetitionSessionStatus.IN_PROGRESS)
 
 
 class AuditLog(Base):
@@ -443,7 +533,7 @@ class AuditLog(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tutor.tenants.tenant_id"))
     action = Column(String(100), nullable=False)
     performed_by = Column(UUID(as_uuid=True), nullable=False)
-    performed_by_role = Column(SQLEnum(UserRole, native_enum=True, create_type=False), nullable=False)
+    performed_by_role = Column(pg_enum(UserRole), nullable=False)
     target_type = Column(String(50), nullable=False)
     target_id = Column(UUID(as_uuid=True), nullable=False)
     details = Column(JSONB)

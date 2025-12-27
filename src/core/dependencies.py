@@ -89,7 +89,7 @@ async def get_current_user(
             if profile:
                 grade_level = profile.grade_level
         
-        return {
+    return {
             "user_id": str(user.user_id),
             "username": user.username,
             "email": user.email,
@@ -97,7 +97,7 @@ async def get_current_user(
             "tenant_id": str(user.tenant_id),
             "grade_level": grade_level,
             "user_type": "tenant_user",
-        }
+    }
 
 
 async def get_current_tenant(

@@ -214,8 +214,8 @@ class TutorService:
         
         assignments = self.db.query(StudentTutorAssignment).filter(
             and_(
-                StudentTutorAssignment.tutor_id == tutor_id,
-                StudentTutorAssignment.tenant_id == tenant_id,
+            StudentTutorAssignment.tutor_id == tutor_id,
+            StudentTutorAssignment.tenant_id == tenant_id,
                 StudentTutorAssignment.status == AssignmentStatus.ACTIVE
             )
         ).all()
@@ -238,7 +238,7 @@ class TutorService:
                 correct_answers = self.db.query(func.count(AnswerSubmission.submission_id)).filter(
                     and_(
                         AnswerSubmission.student_id == student.user_id,
-                        AnswerSubmission.tenant_id == tenant_id,
+                    AnswerSubmission.tenant_id == tenant_id,
                         AnswerSubmission.is_correct == True
                     )
                 ).scalar() or 0
@@ -281,9 +281,9 @@ class TutorService:
         # Verify assignment
         assignment = self.db.query(StudentTutorAssignment).filter(
             and_(
-                StudentTutorAssignment.tutor_id == tutor_id,
-                StudentTutorAssignment.student_id == student_id,
-                StudentTutorAssignment.tenant_id == tenant_id,
+            StudentTutorAssignment.tutor_id == tutor_id,
+            StudentTutorAssignment.student_id == student_id,
+            StudentTutorAssignment.tenant_id == tenant_id,
                 StudentTutorAssignment.status == AssignmentStatus.ACTIVE
             )
         ).first()

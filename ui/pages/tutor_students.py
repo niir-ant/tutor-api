@@ -29,7 +29,7 @@ def render():
             st.subheader(f"📚 {subject_name}")
             
             students = subject_group.get("students", [])
-            for student in students:
+        for student in students:
             with st.expander(f"👤 {student.get('name', student.get('username', 'Unknown'))} - {student.get('email', '')}"):
                 col1, col2 = st.columns(2)
                 

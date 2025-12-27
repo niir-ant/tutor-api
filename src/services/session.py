@@ -97,7 +97,7 @@ class SessionService:
         """Get session status"""
         session = self.db.query(QuizSession).filter(
             and_(
-                QuizSession.session_id == session_id,
+            QuizSession.session_id == session_id,
                 QuizSession.tenant_id == tenant_id
             )
         ).first()
@@ -125,7 +125,7 @@ class SessionService:
         """Get session results"""
         session = self.db.query(QuizSession).filter(
             and_(
-                QuizSession.session_id == session_id,
+            QuizSession.session_id == session_id,
                 QuizSession.tenant_id == tenant_id
             )
         ).first()

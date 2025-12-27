@@ -10,6 +10,7 @@ The migrations follow Semantic Versioning (SemVer) naming convention: `major.min
 - `0.0.20__indexes_and_constraints.sql` - Indexes and constraints for performance
 - `0.0.30__rls_policies.sql` - Row Level Security (RLS) policies for multi-tenant isolation
 - `0.0.40__roles_and_permissions.sql` - Database roles and permissions
+- `0.0.50__auth_rls_fix.sql` - RLS policy fix to allow system admin authentication
 
 ## Prerequisites
 
@@ -30,6 +31,7 @@ psql -U postgres -d tutor
 \i 0.0.20__indexes_and_constraints.sql
 \i 0.0.30__rls_policies.sql
 \i 0.0.40__roles_and_permissions.sql
+\i 0.0.50__auth_rls_fix.sql
 ```
 
 ### Using a Migration Tool
