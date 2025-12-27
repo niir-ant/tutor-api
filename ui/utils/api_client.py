@@ -355,7 +355,7 @@ class APIClient:
     def create_student_account(self, username: str, email: str, grade_level: int = None,
                               send_activation_email: bool = False) -> Dict[str, Any]:
         """Create student account (tenant admin)"""
-        url = f"{self.base_url}/tenant/students"
+        url = f"{self.base_url}/admin/students"
         data = {
             "username": username,
             "email": email,
@@ -370,7 +370,7 @@ class APIClient:
     def create_tutor_account(self, username: str, email: str, name: str,
                             send_activation_email: bool = False) -> Dict[str, Any]:
         """Create tutor account (tenant admin)"""
-        url = f"{self.base_url}/tenant/tutors"
+        url = f"{self.base_url}/admin/tutors"
         data = {
             "username": username,
             "email": email,
@@ -382,7 +382,7 @@ class APIClient:
     
     def list_accounts(self, role: str = None, status: str = None, search: str = None) -> Dict[str, Any]:
         """List accounts (tenant admin)"""
-        url = f"{self.base_url}/tenant/accounts"
+        url = f"{self.base_url}/admin/accounts"
         params = {}
         if role:
             params["role"] = role
@@ -394,15 +394,21 @@ class APIClient:
         response = self.session.get(url, params=params, headers=self._get_headers())
         return self._handle_response(response)
     
+    def get_tenant_statistics(self) -> Dict[str, Any]:
+        """Get tenant statistics (tenant admin)"""
+        url = f"{self.base_url}/admin/statistics"
+        response = self.session.get(url, headers=self._get_headers())
+        return self._handle_response(response)
+    
     def get_account_details(self, account_id: str) -> Dict[str, Any]:
         """Get account details (tenant admin)"""
-        url = f"{self.base_url}/tenant/accounts/{account_id}"
+        url = f"{self.base_url}/admin/accounts/{account_id}"
         response = self.session.get(url, headers=self._get_headers())
         return self._handle_response(response)
     
     def update_account_status(self, account_id: str, status: str, reason: str = None) -> Dict[str, Any]:
         """Update account status (tenant admin)"""
-        url = f"{self.base_url}/tenant/accounts/{account_id}/status"
+        url = f"{self.base_url}/admin/accounts/{account_id}/status"
         data = {"status": status}
         if reason:
             data["reason"] = reason

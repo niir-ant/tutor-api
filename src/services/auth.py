@@ -9,7 +9,7 @@ from uuid import UUID
 
 from src.models.database import (
     UserAccount, SystemAdminAccount, PasswordResetOTP, 
-    UserSubjectRole, TenantAdminAccount
+    UserSubjectRole, TenantAdminAccount, Tenant
 )
 from src.core.security import verify_password, get_password_hash, generate_otp, create_access_token
 from src.core.config import settings
@@ -138,6 +138,31 @@ class AuthService:
             if profile:
                 grade_level = profile.grade_level
         
+        # Get tenant name if tenant_id is available
+        tenant_name = None
+        # For tenant users, use the relationship or query directly
+        if user_type == "tenant_user" and hasattr(user, 'tenant_id') and user.tenant_id:
+            # Try using the relationship first (more efficient)
+            if hasattr(user, 'tenant') and user.tenant:
+                tenant_name = user.tenant.name
+            else:
+                # Fallback: query directly
+                tenant = self.db.query(Tenant).filter(Tenant.tenant_id == user.tenant_id).first()
+                if tenant:
+                    tenant_name = tenant.name
+        elif tenant_id:
+            # Fallback: convert string tenant_id to UUID if needed
+            try:
+                if isinstance(tenant_id, str):
+                    tenant_id_uuid = UUID(tenant_id)
+                else:
+                    tenant_id_uuid = tenant_id
+                tenant = self.db.query(Tenant).filter(Tenant.tenant_id == tenant_id_uuid).first()
+                if tenant:
+                    tenant_name = tenant.name
+            except (ValueError, TypeError):
+                pass  # tenant_name remains None
+        
         # Return user info
         user_id = user.user_id if user_type == "tenant_user" else user.admin_id
         
@@ -147,6 +172,7 @@ class AuthService:
             "email": user.email,
             "role": role,
             "tenant_id": str(tenant_id) if tenant_id else None,
+            "tenant_name": tenant_name,  # Include tenant name
             "grade_level": grade_level,
             "requires_password_change": user.requires_password_change,
             "account_status": account_status,

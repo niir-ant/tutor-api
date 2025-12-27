@@ -487,6 +487,7 @@ class TenantService:
         return {
             "tenant_id": str(tenant_id),
             "tenant_code": tenant.tenant_code,
+            "tenant_name": tenant.name,  # Include tenant name for UI display
             "users": {
                 "total_students": student_count,
                 "total_tutors": tutor_count,

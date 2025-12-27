@@ -81,11 +81,11 @@ def render_student_view():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button(f"📝 Register", key=f"register_{comp_id}", use_container_width=True, type="primary"):
-                    with st.spinner("Registering..."):
-                        result = api_client.register_for_competition(str(comp_id))
-                        if result:
+                        with st.spinner("Registering..."):
+                            result = api_client.register_for_competition(str(comp_id))
+                            if result:
                                 st.success("✅ Successfully registered!")
-                            st.rerun()
+                                st.rerun()
                             else:
                                 st.error("Registration failed. Please try again.")
                 with col2:
@@ -108,7 +108,7 @@ def render_student_view():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button(f"📊 View Results", key=f"results_{comp_id}", use_container_width=True, type="primary"):
-                    show_leaderboard(comp_id)
+                        show_leaderboard(comp_id)
                 with col2:
                     if st.button(f"📋 View Details", key=f"details_ended_{comp_id}", use_container_width=True):
                         show_competition_details(comp_id)

@@ -28,7 +28,7 @@ def render_tenant_admin():
                 name = None
             else:
                 grade_level = None
-                name = st.text_input("Name", required=True)
+                name = st.text_input("Name")
             
             send_activation_email = st.checkbox("Send activation email")
             
