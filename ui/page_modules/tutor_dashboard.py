@@ -10,8 +10,10 @@ def render():
     """Render tutor dashboard"""
     # Welcome message with tutor name (UX-7.1)
     user_info = st.session_state.get("user_info", {})
-    username = user_info.get("username", "Tutor")
-    st.title(f"👨‍🏫 Welcome, {username}!")
+    # Use name if available and not empty, fallback to username
+    name = user_info.get("name")
+    display_name = (name if name and name.strip() else None) or user_info.get("username", "Tutor")
+    st.title(f"👨‍🏫 Welcome, {display_name}!")
     st.markdown("---")
     
     tutor_id = get_user_id()

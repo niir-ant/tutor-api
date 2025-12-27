@@ -4,6 +4,7 @@ Authentication endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from sqlalchemy.orm import Session
 from typing import Optional
+from uuid import UUID
 
 from src.core.database import get_db
 from src.core.dependencies import get_current_tenant, get_current_user
@@ -74,12 +75,25 @@ async def login(
     )
     refresh_token = create_refresh_token(data=token_data)
     
+    # Create UserInfo object from user dict
+    user_info = UserInfo(
+        user_id=UUID(user["user_id"]),
+        username=user["username"],
+        email=user["email"],
+        name=user.get("name"),  # Include name if available
+        role=user["role"],
+        tenant_id=UUID(user["tenant_id"]) if user.get("tenant_id") else None,
+        grade_level=user.get("grade_level"),
+        requires_password_change=user.get("requires_password_change", False),
+        account_status=user.get("account_status", "active"),
+    )
+    
     return LoginResponse(
         access_token=access_token,
         token_type="Bearer",
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         refresh_token=refresh_token,
-        user=user,
+        user=user_info,
         requires_password_change=user.get("requires_password_change", False),
     )
 
@@ -256,10 +270,14 @@ async def get_auth_status(
         )
     
     # Build user info
+    # Get name from user object
+    user_name = user.name if hasattr(user, 'name') and user.name else current_user.get("username")
+    
     user_info = UserInfo(
         user_id=UUID(current_user["user_id"]),
         username=current_user["username"],
         email=current_user["email"],
+        name=user_name,  # Include name from database
         role=current_user["role"],
         tenant_id=UUID(current_user["tenant_id"]) if current_user.get("tenant_id") else None,
         grade_level=current_user.get("grade_level"),

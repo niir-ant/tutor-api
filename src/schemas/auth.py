@@ -18,6 +18,7 @@ class UserInfo(BaseModel):
     user_id: UUID
     username: str
     email: str
+    name: Optional[str] = None  # Display name (optional, defaults to username if not set)
     role: str
     tenant_id: Optional[UUID] = None
     grade_level: Optional[int] = None

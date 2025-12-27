@@ -9,9 +9,11 @@ def render():
     """Render system admin dashboard"""
     # Welcome message (UX-14.1)
     user_info = st.session_state.get("user_info", {})
-    username = user_info.get("username", "System Administrator")
+    # Use name if available and not empty, fallback to username
+    name = user_info.get("name")
+    display_name = (name if name and name.strip() else None) or user_info.get("username", "System Administrator")
     
-    st.title(f"🔧 Welcome, {username}!")
+    st.title(f"🔧 Welcome, {display_name}!")
     st.caption("System Administrator Dashboard")
     st.markdown("---")
     

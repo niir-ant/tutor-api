@@ -166,10 +166,14 @@ class AuthService:
         # Return user info
         user_id = user.user_id if user_type == "tenant_user" else user.admin_id
         
+        # Get name - use name if available and not empty, fallback to username
+        name = user.name if (user.name and user.name.strip()) else user.username
+        
         return {
             "user_id": str(user_id),
             "username": user.username,
             "email": user.email,
+            "name": name,  # Include name (preferred over username for display)
             "role": role,
             "tenant_id": str(tenant_id) if tenant_id else None,
             "tenant_name": tenant_name,  # Include tenant name
