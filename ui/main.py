@@ -8,7 +8,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ui.pages import (
+from ui.page_modules import (
     login_page,
     student_dashboard,
     tutor_dashboard,
@@ -94,7 +94,7 @@ def main():
         st.subheader("Change Your Password")
         
         with st.form("change_password_form"):
-            from ui.pages.login_page import calculate_password_strength
+            from ui.page_modules.login_page import calculate_password_strength
             new_password = st.text_input(
                 "New Password", 
                 type="password", 
@@ -216,67 +216,67 @@ def main():
         if page == "Dashboard":
             student_dashboard.render()
         elif page == "Take Quiz":
-            from ui.pages import quiz_session
+            from ui.page_modules import quiz_session
             quiz_session.render()
         elif page == "My Progress":
-            from ui.pages import student_progress
+            from ui.page_modules import student_progress
             student_progress.render()
         elif page == "Competitions":
-            from ui.pages import competitions
+            from ui.page_modules import competitions
             competitions.render_student_view()
         elif page == "Messages":
-            from ui.pages import messages
+            from ui.page_modules import messages
             messages.render()
     
     elif user_role == "tutor":
         if page == "Dashboard":
             tutor_dashboard.render()
         elif page == "My Students":
-            from ui.pages import tutor_students
+            from ui.page_modules import tutor_students
             tutor_students.render()
         elif page == "Messages":
-            from ui.pages import messages
+            from ui.page_modules import messages
             messages.render()
         elif page == "Student Progress":
-            from ui.pages import tutor_progress
+            from ui.page_modules import tutor_progress
             tutor_progress.render()
     
     elif user_role == "tenant_admin":
         if page == "Dashboard":
             admin_dashboard.render()
         elif page == "Manage Accounts":
-            from ui.pages import manage_accounts
+            from ui.page_modules import manage_accounts
             manage_accounts.render_tenant_admin()
         elif page == "Manage Subjects":
-            from ui.pages import manage_subjects
+            from ui.page_modules import manage_subjects
             manage_subjects.render()
         elif page == "Manage Competitions":
-            from ui.pages import competitions
+            from ui.page_modules import competitions
             competitions.render_admin_view()
         elif page == "Student-Tutor Assignments":
-            from ui.pages import assignments
+            from ui.page_modules import assignments
             assignments.render()
         elif page == "Statistics":
-            from ui.pages import statistics
+            from ui.page_modules import statistics
             statistics.render_tenant_admin()
     
     elif user_role == "system_admin":
         if page == "Dashboard":
             system_admin_dashboard.render()
         elif page == "Manage Tenants":
-            from ui.pages import manage_tenants
+            from ui.page_modules import manage_tenants
             manage_tenants.render()
         elif page == "Manage Accounts":
-            from ui.pages import manage_accounts
+            from ui.page_modules import manage_accounts
             manage_accounts.render_system_admin()
         elif page == "Manage Subjects":
-            from ui.pages import manage_subjects
+            from ui.page_modules import manage_subjects
             manage_subjects.render()
         elif page == "System Statistics":
-            from ui.pages import statistics
+            from ui.page_modules import statistics
             statistics.render_system_admin()
         elif page == "Audit Logs":
-            from ui.pages import audit_logs
+            from ui.page_modules import audit_logs
             audit_logs.render()
 
 
