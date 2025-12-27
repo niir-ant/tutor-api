@@ -32,22 +32,79 @@ def render():
                 total_users = active_users = 0
         except:
             total_users = active_users = 0
+        
+        # Fetch active tenants count
+        try:
+            tenants_data = api_client.list_tenants(status="active")
+            if tenants_data and "tenants" in tenants_data:
+                active_tenants = len(tenants_data.get("tenants", []))
+            else:
+                active_tenants = 0
+        except:
+            active_tenants = 0
+        
+        # Fetch system statistics including active sessions
+        try:
+            system_stats = api_client.get_system_statistics()
+            if system_stats and "activity" in system_stats:
+                active_sessions = system_stats.get("activity", {}).get("active_sessions", 0)
+            else:
+                active_sessions = 0
+        except:
+            active_sessions = 0
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Total Tenants", "N/A", help="Implement statistics endpoint")
+        st.metric("Active Tenants", active_tenants if 'active_tenants' in locals() else 0)
     with col2:
         st.metric("Total Users", total_users if 'total_users' in locals() else "N/A")
     with col3:
-        st.metric("Active Sessions", "N/A", help="Implement statistics endpoint")
+        st.metric("Active Sessions", active_sessions if 'active_sessions' in locals() else 0)
     with col4:
         st.metric("System Health", "🟢 Healthy", help="System health indicator")
     
     # Tenant overview (UX-14.1)
     st.markdown("---")
     st.subheader("🏢 Tenant Overview")
-    st.info("Tenant overview will be displayed here once implemented.")
+    
+    # Fetch tenants for overview
+    with st.spinner("Loading tenant overview..."):
+        try:
+            tenants_data = api_client.list_tenants(status="active")
+            if tenants_data and "tenants" in tenants_data:
+                tenants = tenants_data.get("tenants", [])
+                
+                if tenants:
+                    # Display tenants in a grid
+                    cols = st.columns(min(3, len(tenants)))
+                    for idx, tenant in enumerate(tenants[:9]):  # Show max 9 tenants
+                        col_idx = idx % 3
+                        with cols[col_idx]:
+                            with st.container():
+                                tenant_name = tenant.get('name', 'N/A')
+                                tenant_code = tenant.get('tenant_code', 'N/A')
+                                tenant_status = tenant.get('status', 'N/A')
+                                student_count = tenant.get('student_count', 0)
+                                tutor_count = tenant.get('tutor_count', 0)
+                                
+                                # Status indicator
+                                status_emoji = "🟢" if tenant_status == "active" else "🟡" if tenant_status == "inactive" else "🔴"
+                                
+                                st.markdown(f"**{status_emoji} {tenant_name}**")
+                                st.caption(f"Code: {tenant_code}")
+                                st.metric("Students", student_count)
+                                st.metric("Tutors", tutor_count)
+                                st.markdown("---")
+                    
+                    if len(tenants) > 9:
+                        st.info(f"Showing 9 of {len(tenants)} active tenants. Use 'Manage Tenants' to view all.")
+                else:
+                    st.info("No active tenants found.")
+            else:
+                st.info("No tenant data available.")
+        except Exception as e:
+            st.error(f"Error loading tenant overview: {str(e)}")
     
     # Recent activity (UX-14.1)
     st.markdown("---")

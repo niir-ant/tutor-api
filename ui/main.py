@@ -169,33 +169,38 @@ def main():
         
         # Navigation based on role
         if user_role == "student":
-            page = st.radio(
-                "Navigation",
-                ["Dashboard", "Take Quiz", "My Progress", "Competitions", "Messages"],
-                key="nav_student"
-            )
+            nav_options = ["Dashboard", "Take Quiz", "My Progress", "Competitions", "Messages"]
+            nav_key = "nav_student"
         elif user_role == "tutor":
-            page = st.radio(
-                "Navigation",
-                ["Dashboard", "My Students", "Messages", "Student Progress"],
-                key="nav_tutor"
-            )
+            nav_options = ["Dashboard", "My Students", "Messages", "Student Progress"]
+            nav_key = "nav_tutor"
         elif user_role == "tenant_admin":
-            page = st.radio(
-                "Navigation",
-                ["Dashboard", "Manage Accounts", "Manage Subjects", "Manage Competitions", 
-                 "Student-Tutor Assignments", "Statistics"],
-                key="nav_tenant_admin"
-            )
+            nav_options = ["Dashboard", "Manage Accounts", "Manage Subjects", "Manage Competitions", 
+                 "Student-Tutor Assignments", "Statistics"]
+            nav_key = "nav_tenant_admin"
         elif user_role == "system_admin":
-            page = st.radio(
-                "Navigation",
-                ["Dashboard", "Manage Tenants", "Manage Accounts", "Manage Subjects", 
-                 "System Statistics", "Audit Logs"],
-                key="nav_system_admin"
-            )
+            nav_options = ["Dashboard", "Manage Tenants", "Manage Accounts", "Manage Subjects", 
+                 "System Statistics", "Audit Logs"]
+            nav_key = "nav_system_admin"
         else:
-            page = "Dashboard"
+            nav_options = ["Dashboard"]
+            nav_key = "nav_default"
+        
+        # If page was set by Quick Actions button, update the radio state directly
+        if "page" in st.session_state:
+            selected_page = st.session_state["page"]
+            if selected_page in nav_options:
+                # Directly set the radio button's state key
+                st.session_state[nav_key] = selected_page
+            # Clear the page state
+            del st.session_state["page"]
+        
+        # Render radio button (will use the updated state if set above)
+        page = st.radio(
+            "Navigation",
+            nav_options,
+            key=nav_key
+        )
         
         st.markdown("---")
         

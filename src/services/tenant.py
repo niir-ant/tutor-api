@@ -235,6 +235,155 @@ class TenantService:
             "created_at": tenant.created_at,
         }
     
+    def update_tenant(
+        self,
+        tenant_id: UUID,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        domains: Optional[List[str]] = None,
+        primary_domain: Optional[str] = None,
+        contact_info: Optional[Dict[str, Any]] = None,
+        settings: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Update tenant information"""
+        tenant = self.db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+        
+        if not tenant:
+            raise NotFoundError("Tenant not found")
+        
+        if name is not None:
+            tenant.name = name
+        if description is not None:
+            tenant.description = description
+        if contact_info is not None:
+            tenant.contact_info = contact_info
+        if settings is not None:
+            tenant.settings = settings
+        
+        # Handle domain updates
+        if domains is not None:
+            # Validate primary domain is in domains list if provided
+            if primary_domain and primary_domain not in domains:
+                raise BadRequestError("Primary domain must be in domains list")
+            
+            # Get existing domains for this tenant
+            existing_domains = self.db.query(TenantDomain).filter(
+                TenantDomain.tenant_id == tenant_id
+            ).all()
+            existing_domain_set = {d.domain for d in existing_domains}
+            new_domain_set = set(domains)
+            
+            # Find domains to add and remove
+            domains_to_add = new_domain_set - existing_domain_set
+            domains_to_remove = existing_domain_set - new_domain_set
+            
+            # Check if any new domains already exist for other tenants
+            if domains_to_add:
+                conflicting = self.db.query(TenantDomain).filter(
+                    and_(
+                        TenantDomain.domain.in_(domains_to_add),
+                        TenantDomain.tenant_id != tenant_id
+                    )
+                ).all()
+                if conflicting:
+                    raise BadRequestError("One or more domains already in use by another tenant")
+            
+            # Remove domains that are no longer in the list
+            if domains_to_remove:
+                self.db.query(TenantDomain).filter(
+                    and_(
+                        TenantDomain.tenant_id == tenant_id,
+                        TenantDomain.domain.in_(domains_to_remove)
+                    )
+                ).delete(synchronize_session=False)
+            
+            # Add new domains
+            for domain in domains_to_add:
+                domain_obj = TenantDomain(
+                    tenant_id=tenant_id,
+                    domain=domain,
+                    is_primary=(domain == primary_domain) if primary_domain else False,
+                    status=DomainStatus.ACTIVE,
+                )
+                self.db.add(domain_obj)
+            
+            # Update is_primary flags for existing domains
+            if primary_domain:
+                # Unset all primary flags
+                self.db.query(TenantDomain).filter(
+                    and_(
+                        TenantDomain.tenant_id == tenant_id,
+                        TenantDomain.is_primary == True
+                    )
+                ).update({"is_primary": False})
+                
+                # Set new primary domain
+                primary_domain_obj = self.db.query(TenantDomain).filter(
+                    and_(
+                        TenantDomain.tenant_id == tenant_id,
+                        TenantDomain.domain == primary_domain
+                    )
+                ).first()
+                if primary_domain_obj:
+                    primary_domain_obj.is_primary = True
+                    tenant.primary_domain = primary_domain
+            elif domains:
+                # If domains updated but no primary specified, ensure at least one is primary
+                has_primary = self.db.query(TenantDomain).filter(
+                    and_(
+                        TenantDomain.tenant_id == tenant_id,
+                        TenantDomain.is_primary == True
+                    )
+                ).first()
+                if not has_primary and domains:
+                    # Set first domain as primary
+                    first_domain = domains[0]
+                    first_domain_obj = self.db.query(TenantDomain).filter(
+                        and_(
+                            TenantDomain.tenant_id == tenant_id,
+                            TenantDomain.domain == first_domain
+                        )
+                    ).first()
+                    if first_domain_obj:
+                        first_domain_obj.is_primary = True
+                        tenant.primary_domain = first_domain
+        
+        elif primary_domain is not None:
+            # Only primary domain changed, update it
+            # Validate primary domain exists for this tenant
+            primary_domain_obj = self.db.query(TenantDomain).filter(
+                and_(
+                    TenantDomain.tenant_id == tenant_id,
+                    TenantDomain.domain == primary_domain
+                )
+            ).first()
+            if not primary_domain_obj:
+                raise BadRequestError("Primary domain must be one of the tenant's domains")
+            
+            # Unset all primary flags
+            self.db.query(TenantDomain).filter(
+                and_(
+                    TenantDomain.tenant_id == tenant_id,
+                    TenantDomain.is_primary == True
+                )
+            ).update({"is_primary": False})
+            
+            # Set new primary
+            primary_domain_obj.is_primary = True
+            tenant.primary_domain = primary_domain
+        
+        self.db.commit()
+        self.db.refresh(tenant)
+        
+        return {
+            "tenant_id": str(tenant.tenant_id),
+            "tenant_code": tenant.tenant_code,
+            "name": tenant.name,
+            "description": tenant.description,
+            "status": tenant.status.value,
+            "updated_at": tenant.updated_at,
+        }
+    
     def update_tenant_status(
         self,
         tenant_id: UUID,

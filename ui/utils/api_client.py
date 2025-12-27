@@ -430,6 +430,131 @@ class APIClient:
         response = self.session.get(url, headers=self._get_headers())
         return self._handle_response(response)
     
+    def list_tenants(self, status: str = None, search: str = None) -> Dict[str, Any]:
+        """List all tenants (system admin)"""
+        url = f"{self.base_url}/system/tenants"
+        params = {}
+        if status:
+            params["status"] = status
+        if search:
+            params["search"] = search
+        
+        response = self.session.get(url, params=params, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def create_tenant(
+        self,
+        tenant_code: str,
+        name: str,
+        description: str = None,
+        domains: List[str] = None,
+        primary_domain: str = None,
+        contact_info: Dict[str, Any] = None,
+        settings: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        """Create a new tenant (system admin)"""
+        url = f"{self.base_url}/system/tenants"
+        data = {
+            "tenant_code": tenant_code,
+            "name": name,
+        }
+        if description:
+            data["description"] = description
+        if domains:
+            data["domains"] = domains
+        if primary_domain:
+            data["primary_domain"] = primary_domain
+        if contact_info:
+            data["contact_info"] = contact_info
+        if settings:
+            data["settings"] = settings
+        
+        response = self.session.post(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def get_tenant(self, tenant_id: str) -> Dict[str, Any]:
+        """Get tenant details (system admin)"""
+        url = f"{self.base_url}/system/tenants/{tenant_id}"
+        response = self.session.get(url, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def update_tenant(
+        self,
+        tenant_id: str,
+        name: str = None,
+        description: str = None,
+        domains: List[str] = None,
+        primary_domain: str = None,
+        contact_info: Dict[str, Any] = None,
+        settings: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        """Update tenant information (system admin)"""
+        url = f"{self.base_url}/system/tenants/{tenant_id}"
+        data = {}
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+        if domains is not None:
+            data["domains"] = domains
+        if primary_domain is not None:
+            data["primary_domain"] = primary_domain
+        if contact_info is not None:
+            data["contact_info"] = contact_info
+        if settings is not None:
+            data["settings"] = settings
+        
+        response = self.session.put(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def update_tenant_status(
+        self,
+        tenant_id: str,
+        status: str,
+        reason: str = None,
+    ) -> Dict[str, Any]:
+        """Update tenant status (system admin) - can be used for soft delete"""
+        url = f"{self.base_url}/system/tenants/{tenant_id}/status"
+        data = {"status": status}
+        if reason:
+            data["reason"] = reason
+        
+        response = self.session.put(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def delete_tenant(self, tenant_id: str, reason: str = None) -> Dict[str, Any]:
+        """Soft delete tenant by setting status to suspended (system admin)"""
+        return self.update_tenant_status(tenant_id, "suspended", reason)
+    
+    def create_tenant_admin(
+        self,
+        tenant_id: str,
+        username: str,
+        email: str,
+        name: str = None,
+        send_activation_email: bool = False,
+    ) -> Dict[str, Any]:
+        """Create tenant admin account (system admin)"""
+        url = f"{self.base_url}/system/tenants/{tenant_id}/admins"
+        # Use query parameters as the endpoint expects them
+        params = {
+            "username": username,
+            "email": email,
+        }
+        if name:
+            params["name"] = name
+        if send_activation_email:
+            params["send_activation_email"] = str(send_activation_email).lower()
+        
+        response = self.session.post(url, params=params, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def get_system_statistics(self) -> Dict[str, Any]:
+        """Get system-wide statistics (system admin)"""
+        url = f"{self.base_url}/system/statistics"
+        response = self.session.get(url, headers=self._get_headers())
+        return self._handle_response(response)
+    
     def resolve_tenant(self, domain: str) -> Dict[str, Any]:
         """Resolve tenant from domain"""
         url = f"{self.base_url}/tenant/resolve"

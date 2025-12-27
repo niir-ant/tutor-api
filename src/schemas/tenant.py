@@ -85,6 +85,8 @@ class UpdateTenantRequest(BaseModel):
     """Update tenant request"""
     name: Optional[str] = None
     description: Optional[str] = None
+    domains: Optional[List[str]] = None
+    primary_domain: Optional[str] = None
     contact_info: Optional[TenantContactInfo] = None
     settings: Optional[TenantSettings] = None
 

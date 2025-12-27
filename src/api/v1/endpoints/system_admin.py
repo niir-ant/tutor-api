@@ -3,8 +3,9 @@ System Admin endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func
 from uuid import UUID
-from typing import Optional
+from typing import Optional, Any, Dict
 
 from src.core.database import get_db
 from src.core.dependencies import require_system_admin
@@ -23,12 +24,28 @@ from src.services.student import StudentService
 from src.services.tutor import TutorService
 from src.models.database import (
     SystemAdminAccount, TenantAdminAccount, UserAccount, 
-    UserSubjectRole
+    UserSubjectRole, QuizSession
 )
 from src.core.security import get_password_hash
-from src.models.user import UserRole, AccountStatus
+from src.models.user import UserRole, AccountStatus, AssignmentStatus
 
 router = APIRouter()
+
+
+def _pydantic_to_dict(obj: Any) -> Optional[Dict[str, Any]]:
+    """Convert Pydantic model to dict, handling both v1 and v2"""
+    if obj is None:
+        return None
+    # Pydantic v2 uses model_dump()
+    if hasattr(obj, 'model_dump'):
+        return obj.model_dump()
+    # Pydantic v1 uses dict() (deprecated but kept for backward compatibility)
+    if hasattr(obj, 'dict'):
+        return obj.dict()
+    # Already a dict or other type
+    if isinstance(obj, dict):
+        return obj
+    return obj
 
 
 @router.get("/tenants", response_model=TenantListResponse, status_code=status.HTTP_200_OK)
@@ -60,8 +77,8 @@ async def create_tenant(
         description=request.description,
         domains=request.domains,
         primary_domain=request.primary_domain,
-        contact_info=request.contact_info.dict() if hasattr(request.contact_info, 'dict') else request.contact_info,
-        settings=request.settings.dict() if hasattr(request.settings, 'dict') else request.settings,
+        contact_info=_pydantic_to_dict(request.contact_info),
+        settings=_pydantic_to_dict(request.settings),
         created_by=created_by,
     )
     
@@ -88,8 +105,19 @@ async def update_tenant(
     db: Session = Depends(get_db),
 ):
     """Update tenant (system admin only)"""
-    # TODO: Implement update logic
-    return {"message": "Update not yet implemented"}
+    tenant_service = TenantService(db)
+    
+    result = tenant_service.update_tenant(
+        tenant_id=tenant_id,
+        name=request.name,
+        description=request.description,
+        domains=request.domains,
+        primary_domain=request.primary_domain,
+        contact_info=_pydantic_to_dict(request.contact_info),
+        settings=_pydantic_to_dict(request.settings),
+    )
+    
+    return result
 
 
 @router.put("/tenants/{tenant_id}/status", status_code=status.HTTP_200_OK)
@@ -307,6 +335,70 @@ async def list_accounts(
     }
 
 
+@router.get("/accounts/{account_id}", status_code=status.HTTP_200_OK)
+async def get_account_details(
+    account_id: UUID,
+    current_user: dict = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+):
+    """Get account details (system admin only)"""
+    # Try to find account in UserAccount (tenant-scoped users)
+    user = db.query(UserAccount).filter(UserAccount.user_id == account_id).first()
+    if user:
+        # Determine role
+        tenant_admin = db.query(TenantAdminAccount).filter(
+            TenantAdminAccount.user_id == user.user_id
+        ).first()
+        
+        if tenant_admin:
+            role = "tenant_admin"
+            name = tenant_admin.name
+        else:
+            # Get role from subject roles
+            subject_role = db.query(UserSubjectRole).filter(
+                and_(
+                    UserSubjectRole.user_id == user.user_id,
+                    UserSubjectRole.status == AssignmentStatus.ACTIVE
+                )
+            ).first()
+            
+            if subject_role:
+                role = subject_role.role.value
+            else:
+                role = "unknown"
+            
+            name = user.username
+        
+        return {
+            "account_id": str(user.user_id),
+            "username": user.username,
+            "email": user.email,
+            "name": name,
+            "role": role,
+            "tenant_id": str(user.tenant_id),
+            "status": user.account_status.value,
+            "created_at": user.created_at,
+            "last_login": user.last_login,
+        }
+    
+    # Try SystemAdminAccount
+    admin = db.query(SystemAdminAccount).filter(SystemAdminAccount.admin_id == account_id).first()
+    if admin:
+        return {
+            "account_id": str(admin.admin_id),
+            "username": admin.username,
+            "email": admin.email,
+            "name": admin.name,
+            "role": admin.role.value,
+            "tenant_id": None,
+            "status": admin.account_status.value,
+            "created_at": admin.created_at,
+            "last_login": admin.last_login,
+        }
+    
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+
+
 @router.put("/accounts/{account_id}/status", status_code=status.HTTP_200_OK)
 async def update_account_status(
     account_id: UUID,
@@ -365,6 +457,15 @@ async def get_system_statistics(
     
     total_admins = total_tenant_admins + total_system_admins
     
+    # Count active sessions (sessions with status IN_PROGRESS)
+    from src.models.user import SessionStatus
+    active_sessions = db.query(func.count(QuizSession.session_id)).filter(
+        QuizSession.status == SessionStatus.IN_PROGRESS
+    ).scalar() or 0
+    
+    # Count total sessions
+    total_sessions = db.query(func.count(QuizSession.session_id)).scalar() or 0
+    
     return {
         "users": {
             "total_students": total_students,
@@ -381,9 +482,9 @@ async def get_system_statistics(
             "inactive": 0,
         },
         "activity": {
-            "total_sessions": 0,
+            "total_sessions": total_sessions,
             "total_questions": 0,
             "total_messages": 0,
-            "active_sessions": 0,
+            "active_sessions": active_sessions,
         },
     }
