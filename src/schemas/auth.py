@@ -35,6 +35,7 @@ class LoginResponse(BaseModel):
     expires_in: int
     refresh_token: str
     user: UserInfo
+    requires_password_change: bool = False  # Flag to indicate if password change is required
 
 
 class RefreshTokenRequest(BaseModel):
@@ -97,4 +98,11 @@ class ResendOTPResponse(BaseModel):
     """Resend OTP response"""
     message: str
     otp_expires_in: int
+
+
+class AuthStatusResponse(BaseModel):
+    """Authentication status response"""
+    authenticated: bool
+    requires_password_change: bool = False
+    user: Optional[UserInfo] = None
 

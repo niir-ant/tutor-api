@@ -115,7 +115,7 @@ async def get_account(
     else:
         role = "unknown"
     
-    return {
+        return {
         "account_id": str(user.user_id),
         "username": user.username,
         "email": user.email,

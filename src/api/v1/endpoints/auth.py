@@ -22,6 +22,8 @@ from src.schemas.auth import (
     ResetPasswordResponse,
     ResendOTPRequest,
     ResendOTPResponse,
+    AuthStatusResponse,
+    UserInfo,
 )
 from src.services.auth import AuthService
 from datetime import timedelta
@@ -55,14 +57,8 @@ async def login(
             detail="Incorrect username or password",
         )
     
-    # Check if password change is required
-    if user.get("requires_password_change"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password change required on first login",
-        )
-    
-    # Create tokens
+    # Create tokens (even if password change is required - user is authenticated)
+    # Frontend will check requires_password_change flag and redirect accordingly
     token_data = {
         "sub": str(user["user_id"]),
         "username": user["username"],
@@ -84,6 +80,7 @@ async def login(
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         refresh_token=refresh_token,
         user=user,
+        requires_password_change=user.get("requires_password_change", False),
     )
 
 
@@ -224,5 +221,55 @@ async def resend_otp(
     return ResendOTPResponse(
         message=result["message"],
         otp_expires_in=settings.OTP_EXPIRATION_SECONDS,
+    )
+
+
+@router.get("/status", response_model=AuthStatusResponse, status_code=status.HTTP_200_OK)
+async def get_auth_status(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get current authentication status and password change requirement.
+    Frontend should call this on app initialization to determine which screen to show.
+    """
+    from uuid import UUID
+    from src.models.database import UserAccount, SystemAdminAccount
+    
+    user_type = current_user.get("user_type", "tenant_user")
+    user_id = UUID(current_user["user_id"])
+    
+    # Get user from database to check requires_password_change
+    if user_type == "system_admin":
+        user = db.query(SystemAdminAccount).filter(
+            SystemAdminAccount.admin_id == user_id
+        ).first()
+    else:
+        user = db.query(UserAccount).filter(
+            UserAccount.user_id == user_id
+        ).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    
+    # Build user info
+    user_info = UserInfo(
+        user_id=UUID(current_user["user_id"]),
+        username=current_user["username"],
+        email=current_user["email"],
+        role=current_user["role"],
+        tenant_id=UUID(current_user["tenant_id"]) if current_user.get("tenant_id") else None,
+        grade_level=current_user.get("grade_level"),
+        requires_password_change=user.requires_password_change,
+        account_status=user.account_status.value if hasattr(user.account_status, 'value') else str(user.account_status),
+    )
+    
+    return AuthStatusResponse(
+        authenticated=True,
+        requires_password_change=user.requires_password_change,
+        user=user_info,
     )
 

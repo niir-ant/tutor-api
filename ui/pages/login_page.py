@@ -41,7 +41,13 @@ def calculate_password_strength(password: str) -> dict:
 
 
 def render():
-    """Render login page"""
+    """Render login page - only shows if user is not authenticated"""
+    # Don't render if user is already authenticated
+    from ui.utils.session_state import is_authenticated
+    if is_authenticated():
+        # If authenticated, don't render anything - let main.py handle it
+        return
+    
     st.title("📚 Quiz Platform")
     st.markdown("### Welcome! Please login to continue")
     
@@ -88,22 +94,15 @@ def render():
                 with st.spinner("Logging in..."):
                     result = api_client.login(username, password, domain if domain else None)
                     
-                    if result and "access_token" in result:
-                        # Check if password change is required
-                        user_info = result.get("user", {})
-                        if user_info.get("requires_password_change"):
-                            st.session_state["pending_password_change"] = True
-                            st.session_state["temp_token"] = result["access_token"]
-                            st.session_state["temp_user_info"] = user_info
-                            st.rerun()
-                        else:
-                            set_auth(result["access_token"], user_info)
-                            st.success("✅ Login successful!")
-                            st.rerun()
-                    elif result:
+                    if result and "error" in result:
                         # Handle API errors
                         error_msg = result.get("detail", "Login failed. Please check your credentials.")
-                        if "domain" in error_msg.lower():
+                        status_code = result.get("status_code", 500)
+                        
+                        if status_code == 401:
+                            # Incorrect username or password
+                            st.error(f"🔒 Incorrect username or password. Please check your credentials and try again.")
+                        elif "domain" in error_msg.lower():
                             st.error(f"❌ {error_msg}")
                         elif "password" in error_msg.lower() or "credentials" in error_msg.lower():
                             st.error(f"❌ {error_msg}")
@@ -113,6 +112,26 @@ def render():
                             st.warning(f"⚠️ {error_msg}")
                         else:
                             st.error(f"❌ {error_msg}")
+                    elif result and "access_token" in result:
+                        # Get user info from result
+                        user_info = result.get("user", {})
+                        # Check if password change is required (from top-level flag or user info)
+                        requires_password_change = result.get("requires_password_change", False) or user_info.get("requires_password_change", False)
+                        
+                        if requires_password_change:
+                            # Set auth even if password change is required
+                            # This allows main.py to check the flag and show password change screen
+                            user_info["requires_password_change"] = True
+                            set_auth(result["access_token"], user_info)
+                            # Rerun immediately - main.py will show password change screen
+                            st.rerun()
+                        else:
+                            set_auth(result["access_token"], user_info)
+                            st.success("✅ Login successful!")
+                            st.rerun()
+                    else:
+                        # No result or unexpected response
+                        st.error("❌ Login failed. Please try again.")
         
         if forgot_password_button:
             st.session_state["show_forgot_password"] = True
@@ -201,55 +220,4 @@ def render():
         if st.button("Back"):
             st.session_state["show_reset_password"] = False
             st.rerun()
-    
-    # Password change required (first login)
-    if st.session_state.get("pending_password_change"):
-        st.markdown("---")
-        st.warning("⚠️ Password change required on first login")
-        st.subheader("Change Your Password")
-        with st.form("change_password_form"):
-            new_password = st.text_input(
-                "New Password", 
-                type="password", 
-                placeholder="Enter new password",
-                autocomplete="new-password",
-                key="new_password"
-            )
-            confirm_password = st.text_input(
-                "Confirm Password", 
-                type="password", 
-                placeholder="Confirm new password",
-                autocomplete="new-password",
-                key="confirm_password"
-            )
-            
-            # Password strength indicator (simple version)
-            if new_password:
-                strength = calculate_password_strength(new_password)
-                st.progress(strength["score"] / 4)
-                st.caption(f"Password strength: {strength['label']}")
-            
-            submit = st.form_submit_button("Change Password", use_container_width=True)
-            
-            if submit:
-                if not new_password or not confirm_password:
-                    st.error("Please fill in all fields")
-                elif new_password != confirm_password:
-                    st.error("Passwords do not match")
-                else:
-                    api_client = get_api_client()
-                    # Set temp token for this request
-                    st.session_state["access_token"] = st.session_state["temp_token"]
-                    with st.spinner("Changing password..."):
-                        result = api_client.change_password("", new_password, confirm_password)
-                        if result:
-                            # Update user info
-                            user_info = st.session_state["temp_user_info"].copy()
-                            user_info["requires_password_change"] = False
-                            set_auth(st.session_state["temp_token"], user_info)
-                            st.session_state["pending_password_change"] = False
-                            st.session_state["temp_token"] = None
-                            st.session_state["temp_user_info"] = None
-                            st.success("Password changed successfully!")
-                            st.rerun()
 

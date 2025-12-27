@@ -62,7 +62,32 @@ class APIClient:
             data["domain"] = domain
             params["domain"] = domain
         response = self.session.post(url, json=data, params=params)
-        return self._handle_response(response)
+        
+        # Handle login response specially - don't clear session on 401, return error for display
+        try:
+            if response.status_code == 200 or response.status_code == 201:
+                return response.json()
+            elif response.status_code == 401:
+                # Return error detail for login page to display
+                error_msg = "Incorrect username or password"
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get("detail", error_msg)
+                except:
+                    pass
+                return {"error": True, "detail": error_msg, "status_code": 401}
+            elif response.status_code == 403:
+                return {"error": True, "detail": "You don't have permission to perform this action.", "status_code": 403}
+            else:
+                error_msg = "An error occurred"
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get("detail", error_msg)
+                except:
+                    error_msg = response.text or error_msg
+                return {"error": True, "detail": error_msg, "status_code": response.status_code}
+        except Exception as e:
+            return {"error": True, "detail": f"Error processing response: {str(e)}", "status_code": 500}
     
     def logout(self) -> Dict[str, Any]:
         """Logout user"""

@@ -15,7 +15,7 @@ from ui.pages import (
     admin_dashboard,
     system_admin_dashboard,
 )
-from ui.utils.api_client import APIClient
+from ui.utils.api_client import APIClient, get_api_client
 from ui.utils.session_state import init_session_state, get_user_role, is_authenticated
 
 # Page configuration
@@ -76,15 +76,67 @@ st.markdown("""
 def main():
     """Main application entry point"""
     
-    # Check authentication status
+    # Check authentication status first
     if not is_authenticated():
         # Show login page
         login_page.render()
         return
     
+    # Get user info to check password change requirement
+    user_info = st.session_state.get("user_info", {})
+    
+    # Check if password change is required (from user_info)
+    if user_info.get("requires_password_change"):
+        # User is authenticated but needs to change password
+        # Show ONLY password change form (not login page)
+        st.title("📚 Quiz Platform")
+        st.warning("⚠️ Password change required on first login")
+        st.subheader("Change Your Password")
+        
+        with st.form("change_password_form"):
+            from ui.pages.login_page import calculate_password_strength
+            new_password = st.text_input(
+                "New Password", 
+                type="password", 
+                placeholder="Enter new password",
+                autocomplete="new-password",
+                key="change_password_new"
+            )
+            confirm_password = st.text_input(
+                "Confirm Password", 
+                type="password", 
+                placeholder="Confirm new password",
+                autocomplete="new-password",
+                key="change_password_confirm"
+            )
+            
+            # Password strength indicator
+            if new_password:
+                strength = calculate_password_strength(new_password)
+                st.progress(strength["score"] / 4)
+                st.caption(f"Password strength: {strength['label']}")
+            
+            submit = st.form_submit_button("Change Password", use_container_width=True)
+            
+            if submit:
+                if not new_password or not confirm_password:
+                    st.error("Please fill in all fields")
+                elif new_password != confirm_password:
+                    st.error("Passwords do not match")
+                else:
+                    api_client = get_api_client()
+                    with st.spinner("Changing password..."):
+                        result = api_client.change_password("", new_password, confirm_password)
+                        if result:
+                            # Update user info
+                            user_info["requires_password_change"] = False
+                            st.session_state["user_info"] = user_info
+                            st.success("Password changed successfully!")
+                            st.rerun()
+        return
+    
     # Get user role and info
     user_role = get_user_role()
-    user_info = st.session_state.get("user_info", {})
     
     # Sidebar navigation
     with st.sidebar:
