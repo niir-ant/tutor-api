@@ -1,30 +1,26 @@
 #!/usr/bin/env python3
 """
-Generate SQL INSERT statement for system admin account from environment variables.
+Create system admin account in the database from environment variables.
 
-This script reads admin account details from environment variables and generates
-a SQL INSERT statement that can be manually executed in the database.
+This script reads admin account details from environment variables and creates
+or updates the system admin account directly in the database.
 
 Environment variables required:
     SYSTEM_ADMIN_USERNAME - Username for the system admin
     SYSTEM_ADMIN_EMAIL - Email address for the system admin
-    SYSTEM_ADMIN_NAME - Full name of the system admin
+    SYSTEM_ADMIN_NAME - Full name of the system admin (optional, defaults to "System Administrator")
     SYSTEM_ADMIN_PASSWORD - Temporary password (will be hashed)
 
 Usage:
     python scripts/create_system_admin_from_env.py
 
 Or set variables inline:
-    SYSTEM_ADMIN_USERNAME=admin SYSTEM_ADMIN_EMAIL=admin@example.com python scripts/create_system_admin_from_env.py
-
-The generated SQL can be run manually, for example:
-    psql -d your_database -c "$(python scripts/create_system_admin_from_env.py)"
+    SYSTEM_ADMIN_USERNAME=admin SYSTEM_ADMIN_EMAIL=admin@example.com SYSTEM_ADMIN_PASSWORD=temp123 python scripts/create_system_admin_from_env.py
 """
 import os
 import sys
 import uuid
 from pathlib import Path
-from datetime import datetime
 
 # Try to use bcrypt directly first (more reliable)
 try:
@@ -54,7 +50,16 @@ except Exception as e:
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# No database imports needed - we're just generating SQL
+# Import database modules
+try:
+    from src.core.database import SessionLocal
+    from src.models.user import UserRole, AccountStatus
+    from sqlalchemy import text
+    DB_AVAILABLE = True
+except ImportError as e:
+    DB_AVAILABLE = False
+    print(f"Warning: Could not import database modules: {e}")
+    print("Make sure database migrations have been run and dependencies are installed.")
 
 
 def get_password_hash_safe(password: str) -> str:
@@ -86,7 +91,17 @@ def get_password_hash_safe(password: str) -> str:
 
 
 def create_system_admin_from_env():
-    """Create system admin account from environment variables"""
+    """
+    Create system admin account in database from environment variables.
+    
+    Note: This script creates accounts in the tutor.system_admin_accounts table.
+    System admins are not tenant-scoped (no tenant_id).
+    
+    RLS Note: According to migration 0.0.30__rls_policies.sql, the app_migrator
+    role can insert/update system admin accounts. For initial setup, ensure the
+    DATABASE_URL uses a user with appropriate permissions (app_migrator or app_user
+    with proper context set).
+    """
     # Get values from environment
     username = os.getenv("SYSTEM_ADMIN_USERNAME")
     email = os.getenv("SYSTEM_ADMIN_EMAIL")
@@ -110,154 +125,184 @@ def create_system_admin_from_env():
         print("Add it to your .env file or set it as an environment variable")
         sys.exit(1)
     
+    # Check if database modules are available
+    if not DB_AVAILABLE:
+        print("Error: Database modules are not available.")
+        print("Make sure database migrations have been run and dependencies are installed.")
+        sys.exit(1)
+    
     # Generate password hash
-    print("Generating password hash...", file=sys.stderr)
+    print("Generating password hash...")
     password_hash = get_password_hash_safe(password)
     
-    # Generate UUID for admin_id
-    admin_id = str(uuid.uuid4())
-    
-    # Get current timestamp
-    now = datetime.utcnow().isoformat()
-    
-    # Escape single quotes in SQL strings
-    def escape_sql_string(s):
-        if s is None:
-            return 'NULL'
-        return "'" + str(s).replace("'", "''") + "'"
-    
-    # Generate SQL INSERT statement with ON CONFLICT handling
-    # Note: The table has constraints on username and email, so we handle conflicts on both
-    sql = f"""-- System Admin Account INSERT Statement
--- Generated on: {now}
--- Username: {username}
--- Email: {email}
--- Name: {name}
--- 
--- IMPORTANT: This password hash is for the temporary password.
--- The user MUST change their password on first login!
--- Temporary Password: {password}
---
--- To run this SQL:
---   1. Connect as a user with app_migrator role, OR
---   2. Connect as postgres/superuser and run:
---      SET ROLE app_migrator;
---      [paste SQL below]
---   3. Or temporarily disable RLS:
---      SET LOCAL row_security = off;
---      [paste SQL below]
-
--- Handle conflicts on both username and email
-DO $$
-DECLARE
-    existing_admin_id UUID;
-    existing_username VARCHAR;
-    existing_email VARCHAR;
-BEGIN
-    -- Check for existing account by username
-    SELECT admin_id, username, email INTO existing_admin_id, existing_username, existing_email
-    FROM administrator_accounts
-    WHERE username = {escape_sql_string(username)}
-    LIMIT 1;
-    
-    -- If found by username, update it
-    IF existing_admin_id IS NOT NULL THEN
-        -- Verify it's a system_admin before updating
-        IF EXISTS (SELECT 1 FROM administrator_accounts WHERE admin_id = existing_admin_id AND role = 'system_admin'::user_role) THEN
-            UPDATE administrator_accounts
-            SET
-                email = {escape_sql_string(email)},
-                password_hash = {escape_sql_string(password_hash)},
-                name = {escape_sql_string(name)},
-                role = 'system_admin'::user_role,
-                status = 'pending_activation'::account_status,
-                requires_password_change = TRUE,
-                tenant_id = NULL,
-                updated_at = NOW()
-            WHERE admin_id = existing_admin_id;
-            RAISE NOTICE 'Updated existing system admin account with username: %', {escape_sql_string(username)};
-        ELSE
-            RAISE EXCEPTION 'Account with username % exists but is not a system_admin', {escape_sql_string(username)};
-        END IF;
-    ELSE
-        -- Check for existing account by email
-        SELECT admin_id, username, email INTO existing_admin_id, existing_username, existing_email
-        FROM administrator_accounts
-        WHERE email = {escape_sql_string(email)}
-        LIMIT 1;
+    # Create database session
+    db = SessionLocal()
+    try:
+        # Set search path to tutor schema (as per migration files)
+        # This ensures we can find tables in the tutor schema
+        db.execute(text("SET search_path TO tutor, public"))
+        db.commit()
         
-        -- If found by email, update it
-        IF existing_admin_id IS NOT NULL THEN
-            -- Verify it's a system_admin before updating
-            IF EXISTS (SELECT 1 FROM administrator_accounts WHERE admin_id = existing_admin_id AND role = 'system_admin'::user_role) THEN
-                UPDATE administrator_accounts
-                SET
-                    username = {escape_sql_string(username)},
-                    password_hash = {escape_sql_string(password_hash)},
-                    name = {escape_sql_string(name)},
-                    role = 'system_admin'::user_role,
-                    status = 'pending_activation'::account_status,
-                    requires_password_change = TRUE,
-                    tenant_id = NULL,
-                    updated_at = NOW()
-                WHERE admin_id = existing_admin_id;
-                RAISE NOTICE 'Updated existing system admin account with email: %', {escape_sql_string(email)};
-            ELSE
-                RAISE EXCEPTION 'Account with email % exists but is not a system_admin', {escape_sql_string(email)};
-            END IF;
-        ELSE
-            -- Insert new account
-            INSERT INTO administrator_accounts (
-                admin_id,
-                tenant_id,
-                username,
-                email,
-                password_hash,
-                name,
-                role,
-                status,
-                requires_password_change,
-                created_at,
-                updated_at
-            ) VALUES (
-                {escape_sql_string(admin_id)}::uuid,
-                NULL,
-                {escape_sql_string(username)},
-                {escape_sql_string(email)},
-                {escape_sql_string(password_hash)},
-                {escape_sql_string(name)},
-                'system_admin'::user_role,
-                'pending_activation'::account_status,
-                TRUE,
-                NOW(),
-                NOW()
-            );
-            RAISE NOTICE 'Created new system admin account: %', {escape_sql_string(username)};
-        END IF;
-    END IF;
-END $$;
-"""
-    
-    # Print SQL to stdout (so it can be piped to psql)
-    print(sql)
-    
-    # Print summary to stderr (so it doesn't interfere with piping)
-    print("\n" + "=" * 60, file=sys.stderr)
-    print("SQL INSERT Statement Generated!", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print(f"Admin ID: {admin_id}", file=sys.stderr)
-    print(f"Username: {username}", file=sys.stderr)
-    print(f"Email: {email}", file=sys.stderr)
-    print(f"Name: {name}", file=sys.stderr)
-    print(f"Role: system_admin", file=sys.stderr)
-    print(f"Status: pending_activation", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print(f"Temporary Password: {password}", file=sys.stderr)
-    print("IMPORTANT: Change password on first login!", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print("\nTo execute this SQL:", file=sys.stderr)
-    print("  psql -d your_database -c \"$(python scripts/create_system_admin_from_env.py)\"", file=sys.stderr)
-    print("Or copy the SQL above and run it manually in psql.", file=sys.stderr)
+        # Check if account already exists by username or email
+        # Use raw SQL to query tutor.system_admin_accounts directly
+        existing_by_username = db.execute(
+            text("""
+                SELECT admin_id, username, email, name, role, account_status, requires_password_change
+                FROM tutor.system_admin_accounts
+                WHERE username = :username
+                LIMIT 1
+            """),
+            {"username": username}
+        ).fetchone()
+        
+        existing_by_email = db.execute(
+            text("""
+                SELECT admin_id, username, email, name, role, account_status, requires_password_change
+                FROM tutor.system_admin_accounts
+                WHERE email = :email
+                LIMIT 1
+            """),
+            {"email": email}
+        ).fetchone()
+        
+        existing = existing_by_username or existing_by_email
+        
+        if existing:
+            # Update existing account
+            admin_id = existing[0]
+            existing_role = existing[4]  # role is at index 4
+            
+            # Verify it's a system_admin before updating
+            if existing_role != 'system_admin':
+                print(f"❌ Error: Account with username '{existing[1]}' or email '{existing[2]}' exists but is not a system_admin")
+                print(f"   Current role: {existing_role}")
+                sys.exit(1)
+            
+            # Update the account
+            db.execute(
+                text("""
+                    UPDATE tutor.system_admin_accounts
+                    SET email = :email,
+                        username = :username,
+                        password_hash = :password_hash,
+                        name = :name,
+                        role = 'system_admin'::tutor.user_role,
+                        account_status = 'pending_activation'::tutor.account_status,
+                        requires_password_change = TRUE,
+                        updated_at = NOW()
+                    WHERE admin_id = CAST(:admin_id AS uuid)::uuid
+                """),
+                {
+                    "admin_id": str(admin_id),
+                    "email": email,
+                    "username": username,
+                    "password_hash": password_hash,
+                    "name": name
+                }
+            )
+            db.commit()
+            
+            print("\n" + "=" * 60)
+            print("✅ Updated existing system admin account!")
+            print("=" * 60)
+            print(f"Admin ID: {admin_id}")
+            print(f"Username: {username}")
+            print(f"Email: {email}")
+            print(f"Name: {name}")
+            print(f"Role: system_admin")
+            print(f"Status: pending_activation")
+            print("=" * 60)
+            print(f"Temporary Password: {password}")
+            print("⚠️  IMPORTANT: Change password on first login!")
+            print("=" * 60)
+        else:
+            # Create new account
+            admin_id = uuid.uuid4()
+            
+            db.execute(
+                text("""
+                    INSERT INTO tutor.system_admin_accounts (
+                        admin_id,
+                        username,
+                        email,
+                        password_hash,
+                        name,
+                        role,
+                        account_status,
+                        requires_password_change,
+                        created_at,
+                        updated_at
+                    ) VALUES (
+                        CAST(:admin_id AS uuid),
+                        :username,
+                        :email,
+                        :password_hash,
+                        :name,
+                        'system_admin'::tutor.user_role,
+                        'pending_activation'::tutor.account_status,
+                        TRUE,
+                        NOW(),
+                        NOW()
+                    )
+                """),
+                {
+                    "admin_id": str(admin_id),
+                    "username": username,
+                    "email": email,
+                    "password_hash": password_hash,
+                    "name": name
+                }
+            )
+            db.commit()
+            
+            print("\n" + "=" * 60)
+            print("✅ Created new system admin account!")
+            print("=" * 60)
+            print(f"Admin ID: {admin_id}")
+            print(f"Username: {username}")
+            print(f"Email: {email}")
+            print(f"Name: {name}")
+            print(f"Role: system_admin")
+            print(f"Status: pending_activation")
+            print("=" * 60)
+            print(f"Temporary Password: {password}")
+            print("⚠️  IMPORTANT: Change password on first login!")
+            print("=" * 60)
+            
+    except Exception as e:
+        db.rollback()
+        
+        # Check for specific database errors (table doesn't exist)
+        error_str = str(e).lower()
+        is_table_missing = (
+            "does not exist" in error_str or 
+            "undefinedtable" in error_str or 
+            ("relation" in error_str and (
+                "administrator_accounts" in error_str or 
+                "system_admin_accounts" in error_str
+            ))
+        )
+        
+        if is_table_missing:
+            print("\n❌ Error: Database table 'tutor.system_admin_accounts' does not exist.")
+            print("\n💡 This usually means database migrations haven't been run yet.")
+            print("   Please run migrations first:")
+            print("   1. alembic upgrade head")
+            print("   OR")
+            print("   2. Run the SQL migration files from db/migration/ in order:")
+            print("      - 0.0.10__initial_schema.sql")
+            print("      - 0.0.20__indexes_and_constraints.sql")
+            print("      - 0.0.30__rls_policies.sql")
+            print("      - 0.0.40__roles_and_permissions.sql")
+            print("\n   After migrations are complete, run this script again.")
+        else:
+            print(f"\n❌ Error creating system admin account: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        sys.exit(1)
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":

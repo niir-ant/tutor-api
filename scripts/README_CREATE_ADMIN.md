@@ -4,13 +4,19 @@ This guide explains how to create the first system administrator account in the 
 
 ## Prerequisites
 
-- Database migrations have been run
+- Database migrations have been run (all migration files from `db/migration/`):
+  - `0.0.10__initial_schema.sql`
+  - `0.0.20__indexes_and_constraints.sql`
+  - `0.0.30__rls_policies.sql`
+  - `0.0.40__roles_and_permissions.sql`
 - PostgreSQL database is accessible
-- You have database admin privileges
+- `DATABASE_URL` is configured in your `.env` file
 
 ## Method 1: Using Environment Variables (Recommended)
 
 **This is the easiest and most secure method.**
+
+### Quick Start
 
 1. **Add variables to your `.env` file**:
    ```bash
@@ -27,107 +33,49 @@ This guide explains how to create the first system administrator account in the 
 
 The script will automatically:
 - Read values from `.env` file
-- Generate password hash
-- Create or update the account
+- Generate password hash using bcrypt
+- Create or update the account in `tutor.system_admin_accounts` table
 - Display account details
 
-See `README_ENV_ADMIN.md` for more details.
+### Environment Variables
 
-## Method 2: Using SQL Script with pgcrypto
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SYSTEM_ADMIN_USERNAME` | Yes | Username for the system admin account |
+| `SYSTEM_ADMIN_EMAIL` | Yes | Email address for the system admin |
+| `SYSTEM_ADMIN_NAME` | No | Full name (defaults to "System Administrator") |
+| `SYSTEM_ADMIN_PASSWORD` | Yes | Temporary password (will be changed on first login) |
 
-If your PostgreSQL database has the `pgcrypto` extension available:
+### Example `.env` Entry
 
-1. **Enable pgcrypto extension** (if not already enabled):
-   ```sql
-   CREATE EXTENSION IF NOT EXISTS pgcrypto;
-   ```
-
-2. **Edit the SQL script** to set your credentials:
-   ```bash
-   # Edit scripts/create_first_system_admin.sql
-   # Update these variables in the DO block:
-   #   - temp_password: Your temporary password
-   #   - admin_username: Your desired username
-   #   - admin_email: Your email address
-   #   - admin_name: Your full name
-   ```
-
-3. **Run the SQL script**:
-   ```bash
-   psql -U your_db_user -d your_database -f scripts/create_first_system_admin.sql
-   ```
-
-4. **Note the temporary password** from the output - you'll need it for first login.
-
-## Method 2: Using Python Helper Script
-
-If `pgcrypto` is not available, use the Python script to generate the password hash:
-
-1. **Generate password hash**:
-   ```bash
-   python scripts/generate_password_hash.py
-   ```
-   
-   Or with a specific password:
-   ```bash
-   python scripts/generate_password_hash.py "MySecurePassword123!"
-   ```
-
-2. **Copy the password hash** from the output.
-
-3. **Edit the SQL script** and use the manual INSERT statement:
-   - Uncomment the "Alternative: Manual INSERT" section
-   - Replace `PASSWORD_HASH_HERE` with the hash from step 2
-   - Update username, email, and name fields
-
-4. **Run the SQL script**:
-   ```bash
-   psql -U your_db_user -d your_database -f scripts/create_first_system_admin.sql
-   ```
-
-## Method 3: Direct Python Script (Alternative)
-
-You can also create a Python script that directly inserts into the database:
-
-```python
-from sqlalchemy.orm import Session
-from src.core.database import SessionLocal
-from src.models.database import AdministratorAccount
-from src.core.security import get_password_hash
-from src.models.user import UserRole, AccountStatus
-import secrets
-
-def create_system_admin():
-    db = SessionLocal()
-    try:
-        temp_password = secrets.token_urlsafe(16)
-        password_hash = get_password_hash(temp_password)
-        
-        admin = AdministratorAccount(
-            tenant_id=None,  # System admin has no tenant
-            username='admin',
-            email='admin@example.com',
-            password_hash=password_hash,
-            name='System Administrator',
-            role=UserRole.SYSTEM_ADMIN,
-            account_status=AccountStatus.PENDING_ACTIVATION,
-            requires_password_change=True
-        )
-        
-        db.add(admin)
-        db.commit()
-        
-        print(f"System admin created!")
-        print(f"Username: admin")
-        print(f"Temporary password: {temp_password}")
-        print("Change password on first login!")
-        
-    finally:
-        db.close()
-
-if __name__ == "__main__":
-    create_system_admin()
+```bash
+# System Admin Account Creation
+SYSTEM_ADMIN_USERNAME=admin
+SYSTEM_ADMIN_EMAIL=admin@example.com
+SYSTEM_ADMIN_NAME=System Administrator
+SYSTEM_ADMIN_PASSWORD=TempPassword123!
 ```
+
+### Alternative: Set Variables Inline
+
+You can also set variables inline without modifying `.env`:
+
+```bash
+SYSTEM_ADMIN_USERNAME=admin \
+SYSTEM_ADMIN_EMAIL=admin@example.com \
+SYSTEM_ADMIN_PASSWORD=TempPassword123! \
+python scripts/create_system_admin_from_env.py
+```
+
+### What the Script Does
+
+1. Loads environment variables from `.env` file
+2. Validates that required variables are set
+3. Generates bcrypt password hash (using bcrypt directly or passlib as fallback)
+4. Sets database search path to `tutor` schema
+5. Checks if account already exists (by username or email in `tutor.system_admin_accounts`)
+6. Creates new account or updates existing one
+7. Displays account details and temporary password
 
 ## First Login
 
@@ -144,31 +92,121 @@ After creating the account:
 
 ## Important Notes
 
-- **System admins have `tenant_id = NULL`** - they don't belong to any tenant
+- **System admins are not tenant-scoped**: They have `tenant_id = NULL` and don't belong to any tenant
+- **Table location**: Accounts are stored in `tutor.system_admin_accounts` table
+- **Schema**: The script automatically sets the search path to the `tutor` schema
 - **Domain requirement**: Even though system admins don't have a tenant, the login endpoint currently requires a domain parameter. Use any valid tenant domain.
 - **Security**: 
   - Use a strong temporary password
   - Change password immediately after first login
   - Delete any credential files after use
   - Never commit passwords or hashes to version control
+  - Never commit `.env` file to version control
 
 ## Troubleshooting
 
-### Error: "role does not exist"
-- Make sure the `user_role` enum includes `'system_admin'`
-- Check that migrations have been run
+### Error: "Database table 'tutor.system_admin_accounts' does not exist"
 
-### Error: "tenant_id constraint violation"
-- System admin must have `tenant_id = NULL`
-- Make sure you're not setting a tenant_id for system_admin
+**Cause**: Database migrations haven't been run yet.
 
-### Error: "username or email already exists"
-- The account may already exist
-- Check existing accounts: `SELECT * FROM administrator_accounts WHERE role = 'system_admin';`
-- Delete and recreate if needed (be careful!)
+**Solution**: Run migrations first:
+```bash
+# Option 1: Using Alembic
+alembic upgrade head
+
+# Option 2: Run SQL files manually (in order)
+psql -U your_db_user -d your_database -f db/migration/0.0.10__initial_schema.sql
+psql -U your_db_user -d your_database -f db/migration/0.0.20__indexes_and_constraints.sql
+psql -U your_db_user -d your_database -f db/migration/0.0.30__rls_policies.sql
+psql -U your_db_user -d your_database -f db/migration/0.0.40__roles_and_permissions.sql
+```
+
+### Error: "SYSTEM_ADMIN_USERNAME environment variable is required"
+
+**Cause**: Required environment variable is not set.
+
+**Solution**: 
+- Add the variable to your `.env` file
+- Or set it inline when running the script (see "Alternative: Set Variables Inline" above)
+
+### Error: "Account exists but is not a system_admin"
+
+**Cause**: An account with that username/email exists but has a different role.
+
+**Solution**: 
+- Delete the existing account first, or use different credentials
+- Check existing accounts: 
+  ```sql
+  SELECT * FROM tutor.system_admin_accounts WHERE username = 'your_username' OR email = 'your_email';
+  ```
+
+### Error: Database connection failed
+
+**Cause**: Database connection issues.
+
+**Solution**:
+- Check your `DATABASE_URL` in `.env` file
+- Ensure the database is running and accessible
+- Verify database credentials are correct
+- Check network connectivity to the database server
+
+### Error: "role does not exist" or enum type errors
+
+**Cause**: The `user_role` or `account_status` enum types don't exist.
+
+**Solution**:
+- Make sure migrations have been run (especially `0.0.10__initial_schema.sql`)
+- Check that the `tutor.user_role` enum includes `'system_admin'`
+- Check that the `tutor.account_status` enum exists
+
+### Error: Permission denied or RLS policy errors
+
+**Cause**: The database user doesn't have proper permissions or RLS is blocking access.
+
+**Solution**:
+- Ensure you're using a database user with appropriate permissions (e.g., `app_migrator` role)
+- According to migration `0.0.30__rls_policies.sql`, the `app_migrator` role can insert/update system admin accounts
+- For initial setup, you may need to connect as a superuser or temporarily disable RLS
 
 ### Login fails with "Domain is required"
-- The authentication service requires a domain parameter
+
+**Cause**: The authentication service requires a domain parameter.
+
+**Solution**:
 - Use any valid tenant domain from your database
 - This is a known limitation - system admins should be able to login without domain
+- Check available domains: 
+  ```sql
+  SELECT domain FROM tutor.tenant_domains WHERE status = 'active';
+  ```
 
+## Database Schema Reference
+
+The system admin account is stored in the `tutor.system_admin_accounts` table with the following structure:
+
+- `admin_id` (UUID, primary key)
+- `username` (VARCHAR(100), unique, not null)
+- `email` (VARCHAR(255), unique, not null)
+- `password_hash` (VARCHAR(255), not null)
+- `name` (VARCHAR(255), not null)
+- `role` (tutor.user_role enum, default: 'system_admin')
+- `account_status` (tutor.account_status enum, default: 'pending_activation')
+- `requires_password_change` (BOOLEAN, default: TRUE)
+- `permissions` (TEXT[])
+- `failed_login_attempts` (INTEGER, default: 0)
+- `locked_until` (TIMESTAMP WITH TIME ZONE)
+- `created_at` (TIMESTAMP WITH TIME ZONE)
+- `updated_at` (TIMESTAMP WITH TIME ZONE)
+- `last_login` (TIMESTAMP WITH TIME ZONE)
+- `created_by` (UUID, references system_admin_accounts.admin_id)
+
+**Note**: System admins do NOT have a `tenant_id` column - they are not tenant-scoped.
+
+## Security Best Practices
+
+1. **Use strong temporary passwords**: At least 12 characters with mixed case, numbers, and symbols
+2. **Change password immediately**: After first login, change the password to something secure
+3. **Protect credentials**: Never commit `.env` files or passwords to version control
+4. **Rotate credentials**: Periodically review and update system admin accounts
+5. **Audit access**: Monitor system admin account usage and login attempts
+6. **Limit accounts**: Only create system admin accounts for users who truly need system-level access
