@@ -12,9 +12,36 @@ def render_tenant_admin():
     
     api_client = get_api_client()
     
-    tab1, tab2, tab3 = st.tabs(["Create Account", "List Accounts", "Account Details"])
+    # Check flags to switch views (must happen BEFORE widget creation)
+    if st.session_state.get("back_to_list_accounts_tenant", False):
+        st.session_state["account_view_tenant"] = "List Accounts"
+        st.session_state["selected_account_id"] = None
+        st.session_state["back_to_list_accounts_tenant"] = False
     
-    with tab1:
+    # Check if we should switch to Account Details view (when account is selected)
+    if st.session_state.get("view_account_details_tenant", False):
+        st.session_state["account_view_tenant"] = "Account Details"
+        st.session_state["view_account_details_tenant"] = False
+    
+    # Use selectbox to control view (allows programmatic switching)
+    if "account_view_tenant" not in st.session_state:
+        st.session_state["account_view_tenant"] = "List Accounts"
+    
+    view_options = ["Create Account", "List Accounts", "Account Details"]
+    current_view = st.session_state.get("account_view_tenant", "List Accounts")
+    if current_view not in view_options:
+        current_view = "List Accounts"
+        st.session_state["account_view_tenant"] = current_view
+    
+    view = st.selectbox(
+        "View",
+        view_options,
+        key="account_view_tenant"
+    )
+    
+    st.markdown("---")
+    
+    if view == "Create Account":
         st.subheader("Create New Account")
         
         # Display success message and password from session state if available
@@ -79,12 +106,39 @@ def render_tenant_admin():
                             # Empty result shouldn't happen, but handle it
                             st.error("❌ Failed to create account. Please try again.")
     
-    with tab2:
+    elif view == "List Accounts":
         st.subheader("All Accounts")
         
-        role_filter = st.selectbox("Filter by Role", ["all", "student", "tutor"])
-        status_filter = st.selectbox("Filter by Status", ["all", "active", "inactive"])
-        search = st.text_input("Search", placeholder="Search by username, email, or name")
+        # Initialize session state for filters and accounts
+        if "account_role_filter_tenant" not in st.session_state:
+            st.session_state["account_role_filter_tenant"] = "all"
+        if "account_status_filter_tenant" not in st.session_state:
+            st.session_state["account_status_filter_tenant"] = "all"
+        if "account_search_text_tenant" not in st.session_state:
+            st.session_state["account_search_text_tenant"] = ""
+        if "cached_accounts_tenant" not in st.session_state:
+            st.session_state["cached_accounts_tenant"] = None
+        
+        role_options = ["all", "student", "tutor"]
+        current_role = st.session_state["account_role_filter_tenant"]
+        role_index = role_options.index(current_role) if current_role in role_options else 0
+        role_filter = st.selectbox("Filter by Role", role_options, index=role_index)
+        
+        status_options = ["all", "active", "inactive"]
+        current_status = st.session_state["account_status_filter_tenant"]
+        status_index = status_options.index(current_status) if current_status in status_options else 0
+        status_filter = st.selectbox("Filter by Status", status_options, index=status_index)
+        
+        search = st.text_input(
+            "Search", 
+            placeholder="Search by username, email, or name",
+            value=st.session_state["account_search_text_tenant"]
+        )
+        
+        # Update session state when filters change
+        st.session_state["account_role_filter_tenant"] = role_filter
+        st.session_state["account_status_filter_tenant"] = status_filter
+        st.session_state["account_search_text_tenant"] = search
         
         if st.button("Search"):
             with st.spinner("Loading accounts..."):
@@ -96,6 +150,15 @@ def render_tenant_admin():
             
             if accounts_data and "accounts" in accounts_data:
                 accounts = accounts_data["accounts"]
+                st.session_state["cached_accounts_tenant"] = accounts
+            else:
+                st.session_state["cached_accounts_tenant"] = []
+                st.info("No accounts found.")
+        
+        # Display cached accounts if they exist
+        if st.session_state.get("cached_accounts_tenant") is not None:
+            accounts = st.session_state["cached_accounts_tenant"]
+            if accounts:
                 st.write(f"Found {len(accounts)} account(s)")
                 
                 for account in accounts:
@@ -105,44 +168,169 @@ def render_tenant_admin():
                             st.write(f"**Email:** {account.get('email')}")
                             st.write(f"**Status:** {account.get('status', 'unknown')}")
                         with col2:
-                            if st.button("View Details", key=f"view_{account.get('account_id')}"):
-                                st.session_state["selected_account_id"] = account.get("account_id")
+                            # Use account_id (normalized by API) or fallback to user_id
+                            account_id = account.get("account_id") or account.get("user_id")
+                            if st.button("View Details", key=f"view_{account_id}"):
+                                st.session_state["selected_account_id"] = account_id
+                                st.session_state["view_account_details_tenant"] = True
                                 st.rerun()
             else:
                 st.info("No accounts found.")
+        else:
+            st.info("Click 'Search' to load accounts.")
     
-    with tab3:
+    elif view == "Account Details":
         st.subheader("Account Details")
         account_id = st.session_state.get("selected_account_id")
         
+        # Back button
+        if st.button("← Back to List", key="back_to_list_tenant"):
+            st.session_state["back_to_list_accounts_tenant"] = True
+            st.rerun()
+        
+        st.markdown("---")
+        
         if account_id:
-            with st.spinner("Loading account details..."):
-                account_details = api_client.get_account_details(account_id)
-            
-            if account_details:
-                st.write(f"**Username:** {account_details.get('username')}")
-                st.write(f"**Email:** {account_details.get('email')}")
-                st.write(f"**Name:** {account_details.get('name', 'N/A')}")
-                st.write(f"**Role:** {account_details.get('role', 'N/A')}")
-                st.write(f"**Status:** {account_details.get('status', 'N/A')}")
-                st.write(f"**Created:** {account_details.get('created_at', 'N/A')}")
-                st.write(f"**Last Login:** {account_details.get('last_login', 'Never')}")
+            try:
+                with st.spinner("Loading account details..."):
+                    account_details = api_client.get_account_details(account_id)
                 
-                # Status update
-                st.markdown("---")
-                st.subheader("Update Status")
-                new_status = st.selectbox("New Status", ["active", "inactive"], key="status_update")
-                reason = st.text_input("Reason (optional)", key="status_reason")
-                
-                if st.button("Update Status"):
-                    result = api_client.update_account_status(account_id, new_status, reason)
-                if result:
-                    st.success("✅ Status updated successfully!")
-                    st.rerun()
+                if account_details and not account_details.get("error"):
+                    # Display account information
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Username:** {account_details.get('username')}")
+                        st.write(f"**Email:** {account_details.get('email')}")
+                        st.write(f"**Name:** {account_details.get('name', 'N/A')}")
+                        st.write(f"**Role:** {account_details.get('role', 'N/A')}")
+                    with col2:
+                        st.write(f"**Status:** {account_details.get('status', 'N/A')}")
+                        st.write(f"**Created:** {account_details.get('created_at', 'N/A')}")
+                        st.write(f"**Last Login:** {account_details.get('last_login', 'Never')}")
+                    
+                    st.markdown("---")
+                    
+                    # Action tabs
+                    tab1, tab2, tab3, tab4 = st.tabs(["Edit Account", "Reset Password", "Change Status", "Soft Delete"])
+                    
+                    # Edit Account Tab
+                    with tab1:
+                        st.subheader("Edit Account")
+                        account_role = account_details.get('role', '')
+                        
+                        with st.form("edit_account_form_tenant"):
+                            new_username = st.text_input("Username", value=account_details.get('username', ''))
+                            new_email = st.text_input("Email", value=account_details.get('email', ''))
+                            
+                            # Show name field for all user types (students, tutors, tenant admins)
+                            current_name = account_details.get('name', '')
+                            # If name is the same as username, it means name wasn't set, so show empty
+                            if current_name == account_details.get('username', ''):
+                                current_name = ''
+                            new_name = st.text_input("Name", value=current_name, help="Display name (optional, defaults to username if not set)")
+                            
+                            if st.form_submit_button("Update Account", use_container_width=True):
+                                if not new_username or not new_email:
+                                    st.error("Username and email are required")
+                                else:
+                                    with st.spinner("Updating account..."):
+                                        result = api_client.update_account(
+                                            account_id=account_id,
+                                            username=new_username,
+                                            email=new_email,
+                                            name=new_name if new_name else None,
+                                        )
+                                    
+                                    if result and not result.get("error"):
+                                        st.success("✅ Account updated successfully!")
+                                        st.rerun()
+                                    else:
+                                        error_msg = result.get("detail", "Failed to update account") if result else "Failed to update account"
+                                        st.error(f"❌ {error_msg}")
+                    
+                    # Reset Password Tab
+                    with tab2:
+                        st.subheader("Reset Password")
+                        st.info("This will generate a new temporary password. The user will be required to change it on next login.")
+                        
+                        with st.form("reset_password_form_tenant"):
+                            send_email = st.checkbox("Send password via email (not implemented yet)", disabled=True, help="Email sending is not yet implemented")
+                            
+                            if st.form_submit_button("Reset Password", use_container_width=True, type="primary"):
+                                with st.spinner("Resetting password..."):
+                                    result = api_client.reset_account_password(
+                                        account_id=account_id,
+                                        send_email=False,  # Always False until email is implemented
+                                    )
+                                
+                                if result and not result.get("error"):
+                                    st.success("✅ Password reset successfully!")
+                                    if result.get("temporary_password"):
+                                        st.warning(f"⚠️ **New Temporary Password:** `{result['temporary_password']}`\n\nPlease share this password securely with the user. They will be required to change it on next login.")
+                                else:
+                                    error_msg = result.get("detail", "Failed to reset password") if result else "Failed to reset password"
+                                    st.error(f"❌ {error_msg}")
+                    
+                    # Change Status Tab
+                    with tab3:
+                        st.subheader("Change Account Status")
+                        current_status = account_details.get('status', 'active')
+                        status_options = ["active", "inactive", "locked", "pending_activation"]
+                        current_index = status_options.index(current_status) if current_status in status_options else 0
+                        
+                        with st.form("change_status_form_tenant"):
+                            new_status = st.selectbox("Status", status_options, index=current_index)
+                            reason = st.text_area("Reason (optional)", placeholder="Enter reason for status change")
+                            
+                            if st.form_submit_button("Update Status", use_container_width=True):
+                                with st.spinner("Updating status..."):
+                                    result = api_client.update_account_status(
+                                        account_id=account_id,
+                                        status=new_status,
+                                        reason=reason if reason else None,
+                                    )
+                                
+                                if result and not result.get("error"):
+                                    st.success(f"✅ Account status updated to '{new_status}'!")
+                                    st.rerun()
+                                else:
+                                    error_msg = result.get("detail", "Failed to update status") if result else "Failed to update status"
+                                    st.error(f"❌ {error_msg}")
+                    
+                    # Soft Delete Tab
+                    with tab4:
+                        st.subheader("Soft Delete Account")
+                        st.warning("⚠️ This will set the account status to 'inactive' (soft delete). The account data will be preserved but the user will not be able to log in.")
+                        
+                        with st.form("soft_delete_form_tenant"):
+                            reason = st.text_area("Reason for deletion", placeholder="Enter reason for soft deletion")
+                            confirm = st.checkbox("I understand this will disable the account")
+                            
+                            if st.form_submit_button("Soft Delete Account", use_container_width=True, type="primary"):
+                                if not confirm:
+                                    st.error("Please confirm that you understand the consequences")
+                                elif not reason:
+                                    st.error("Please provide a reason for deletion")
+                                else:
+                                    with st.spinner("Soft deleting account..."):
+                                        result = api_client.update_account_status(
+                                            account_id=account_id,
+                                            status="inactive",
+                                            reason=reason,
+                                        )
+                                    
+                                    if result and not result.get("error"):
+                                        st.success("✅ Account soft deleted successfully!")
+                                        st.rerun()
+                                    else:
+                                        error_msg = result.get("detail", "Failed to soft delete account") if result else "Failed to soft delete account"
+                                        st.error(f"❌ {error_msg}")
                 else:
-                    st.error("❌ Failed to update account status. Please try again.")
-            else:
-                st.error("❌ Could not load account details. Please try again.")
+                    error_msg = account_details.get("detail", "Could not load account details.") if account_details else "Could not load account details."
+                    st.error(f"❌ {error_msg}")
+            except Exception as e:
+                st.error(f"❌ Error loading account details: {str(e)}")
+                st.info(f"Account ID: {account_id}")
         else:
             st.info("ℹ️ Select an account from the list to view details.")
 
@@ -332,7 +520,7 @@ def render_system_admin():
                             
                             if st.form_submit_button("Reset Password", use_container_width=True, type="primary"):
                                 with st.spinner("Resetting password..."):
-                                    result = api_client.reset_account_password(
+                                    result = api_client.reset_system_account_password(
                                         account_id=account_id,
                                         send_email=False,  # Always False until email is implemented
                                     )
@@ -358,7 +546,7 @@ def render_system_admin():
                             
                             if st.form_submit_button("Update Status", use_container_width=True):
                                 with st.spinner("Updating status..."):
-                                    result = api_client.update_account_status(
+                                    result = api_client.update_system_account_status(
                                         account_id=account_id,
                                         status=new_status,
                                         reason=reason if reason else None,
@@ -387,7 +575,7 @@ def render_system_admin():
                                     st.error("Please provide a reason for deletion")
                                 else:
                                     with st.spinner("Soft deleting account..."):
-                                        result = api_client.update_account_status(
+                                        result = api_client.update_system_account_status(
                                             account_id=account_id,
                                             status="inactive",
                                             reason=reason,

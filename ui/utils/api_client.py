@@ -409,6 +409,26 @@ class APIClient:
         response = self.session.get(url, headers=self._get_headers())
         return self._handle_response(response)
     
+    def update_account(self, account_id: str, username: str = None, email: str = None, name: str = None) -> Dict[str, Any]:
+        """Update account details (tenant admin)"""
+        url = f"{self.base_url}/admin/accounts/{account_id}"
+        data = {}
+        if username is not None:
+            data["username"] = username
+        if email is not None:
+            data["email"] = email
+        if name is not None:
+            data["name"] = name
+        response = self.session.put(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def reset_account_password(self, account_id: str, send_email: bool = False) -> Dict[str, Any]:
+        """Reset account password (tenant admin)"""
+        url = f"{self.base_url}/admin/accounts/{account_id}/reset-password"
+        data = {"send_email": send_email}
+        response = self.session.post(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
     def update_account_status(self, account_id: str, status: str, reason: str = None) -> Dict[str, Any]:
         """Update account status (tenant admin)"""
         url = f"{self.base_url}/admin/accounts/{account_id}/status"
@@ -459,7 +479,7 @@ class APIClient:
         response = self.session.put(url, json=data, headers=self._get_headers())
         return self._handle_response(response)
     
-    def reset_account_password(
+    def reset_system_account_password(
         self,
         account_id: str,
         send_email: bool = False,
@@ -470,7 +490,7 @@ class APIClient:
         response = self.session.post(url, json=data, headers=self._get_headers())
         return self._handle_response(response)
     
-    def update_account_status(
+    def update_system_account_status(
         self,
         account_id: str,
         status: str,
@@ -618,8 +638,13 @@ class APIClient:
 
 
 # Create a singleton instance
-@st.cache_resource
-def get_api_client() -> APIClient:
-    """Get API client instance"""
+# Version parameter helps force cache refresh when code changes
+@st.cache_resource(show_spinner=False)
+def get_api_client(_version: int = 2) -> APIClient:
+    """Get API client instance
+    
+    Args:
+        _version: Internal version parameter to force cache refresh when incremented
+    """
     return APIClient()
 

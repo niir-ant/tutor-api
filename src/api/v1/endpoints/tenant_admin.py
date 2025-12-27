@@ -10,14 +10,16 @@ from pydantic import BaseModel
 
 from src.core.database import get_db
 from src.core.dependencies import require_tenant_admin
+from src.core.security import get_password_hash
 from src.services.student import StudentService
 from src.services.tutor import TutorService
 from src.services.tenant import TenantService
 from src.models.database import (
     StudentTutorAssignment, UserAccount, UserSubjectRole, 
-    TenantAdminAccount
+    TenantAdminAccount, TutorSubjectProfile
 )
 from src.models.user import AccountStatus, UserRole, AssignmentStatus
+from src.schemas.auth import UpdateAccountRequest, ResetPasswordRequestAdmin, ResetPasswordResponseAdmin
 from datetime import datetime
 
 router = APIRouter()
@@ -62,11 +64,21 @@ async def list_accounts(
     if not role or role == "student":
         student_service = StudentService(db)
         result = student_service.list_students(tenant_id=tenant_id, status=status, search=search)
+        # Normalize to use account_id instead of user_id for consistency
+        for student in result["students"]:
+            student["account_id"] = student.get("user_id")
+            student["role"] = "student"
+            student["status"] = student.get("account_status", student.get("status", "active"))
         accounts.extend(result["students"])
     
     if not role or role == "tutor":
         tutor_service = TutorService(db)
         result = tutor_service.list_tutors(tenant_id=tenant_id, status=status, search=search)
+        # Normalize to use account_id instead of user_id for consistency
+        for tutor in result["tutors"]:
+            tutor["account_id"] = tutor.get("user_id")
+            tutor["role"] = "tutor"
+            tutor["status"] = tutor.get("account_status", tutor.get("status", "active"))
         accounts.extend(result["tutors"])
     
     return {
@@ -110,18 +122,134 @@ async def get_account(
     
     if tenant_admin:
         role = "tenant_admin"
+        name = user.name or tenant_admin.name or user.username  # Prefer user_accounts.name, fallback to tenant_admin.name
     elif subject_role:
         role = subject_role.role.value
+        name = user.name or user.username  # Use name from user_accounts
     else:
         role = "unknown"
+        name = user.name or user.username  # Use name from user_accounts
     
-        return {
+    return {
         "account_id": str(user.user_id),
         "username": user.username,
         "email": user.email,
+        "name": name,
         "role": role,
         "status": user.account_status.value,
-        }
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "last_login": user.last_login.isoformat() if user.last_login else None,
+    }
+
+
+@router.put("/accounts/{account_id}", status_code=status.HTTP_200_OK)
+async def update_account(
+    account_id: UUID,
+    request: UpdateAccountRequest,
+    current_user: dict = Depends(require_tenant_admin),
+    db: Session = Depends(get_db),
+):
+    """Update account details (tenant admin only)"""
+    tenant_id = UUID(current_user["tenant_id"])
+    
+    # Query user account
+    user = db.query(UserAccount).filter(
+        and_(
+            UserAccount.user_id == account_id,
+            UserAccount.tenant_id == tenant_id
+        )
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    
+    # Update username if provided
+    if request.username:
+        # Check if username already exists in the same tenant
+        existing = db.query(UserAccount).filter(
+            and_(
+                UserAccount.username == request.username,
+                UserAccount.user_id != account_id,
+                UserAccount.tenant_id == tenant_id
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists in this tenant")
+        user.username = request.username
+    
+    # Update email if provided
+    if request.email:
+        # Check if email already exists in the same tenant
+        existing = db.query(UserAccount).filter(
+            and_(
+                UserAccount.email == request.email,
+                UserAccount.user_id != account_id,
+                UserAccount.tenant_id == tenant_id
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists in this tenant")
+        user.email = request.email
+    
+    # Update name if provided (for all user types)
+    if request.name:
+        user.name = request.name
+        # Also update tenant_admin.name for backward compatibility
+        tenant_admin = db.query(TenantAdminAccount).filter(
+            TenantAdminAccount.user_id == user.user_id
+        ).first()
+        if tenant_admin:
+            tenant_admin.name = request.name
+    
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "account_id": str(account_id),
+        "username": user.username,
+        "email": user.email,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+@router.post("/accounts/{account_id}/reset-password", response_model=ResetPasswordResponseAdmin, status_code=status.HTTP_200_OK)
+async def reset_account_password(
+    account_id: UUID,
+    request: ResetPasswordRequestAdmin,
+    current_user: dict = Depends(require_tenant_admin),
+    db: Session = Depends(get_db),
+):
+    """Reset account password (tenant admin only)"""
+    import secrets
+    
+    tenant_id = UUID(current_user["tenant_id"])
+    
+    # Query user account
+    user = db.query(UserAccount).filter(
+        and_(
+            UserAccount.user_id == account_id,
+            UserAccount.tenant_id == tenant_id
+        )
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    
+    # Generate temporary password
+    temp_password = secrets.token_urlsafe(12)
+    password_hash = get_password_hash(temp_password)
+    
+    # Update password
+    user.password_hash = password_hash
+    user.requires_password_change = True
+    db.commit()
+    
+    # TODO: Send email if send_email is True
+    # For now, always return password
+    return ResetPasswordResponseAdmin(
+        message="Password reset successfully. User will be required to change password on next login.",
+        temporary_password=temp_password if not request.send_email else None
+    )
 
 
 @router.put("/accounts/{account_id}/status", status_code=status.HTTP_200_OK)
@@ -132,7 +260,7 @@ async def update_account_status(
     current_user: dict = Depends(require_tenant_admin),
     db: Session = Depends(get_db),
 ):
-    """Update account status (tenant admin only)"""
+    """Update account status (tenant admin only) - can be used for soft delete by setting status to 'inactive'"""
     tenant_id = UUID(current_user["tenant_id"])
     
     account = db.query(UserAccount).filter(
@@ -145,9 +273,11 @@ async def update_account_status(
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
     
-        account.account_status = AccountStatus(status)
-        db.commit()
-    return {"account_id": str(account_id), "status": status}
+    account.account_status = AccountStatus(status)
+    db.commit()
+    db.refresh(account)
+    
+    return {"account_id": str(account_id), "status": status, "updated_at": account.updated_at.isoformat() if account.updated_at else None}
 
 
 @router.post("/students", status_code=status.HTTP_201_CREATED)

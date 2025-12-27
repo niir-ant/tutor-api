@@ -337,7 +337,7 @@ class CompetitionService:
             leaderboard.append({
                 "rank": idx,
                 "student_id": str(session.student_id),
-                "student_name": student.username if student else "Unknown",
+                "student_name": (student.name or student.username) if student else "Unknown",
                 "score": float(session.score),
                 "max_score": float(session.max_score),
                 "accuracy": float(session.accuracy) if session.accuracy else 0.0,

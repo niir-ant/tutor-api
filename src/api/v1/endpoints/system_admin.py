@@ -196,6 +196,7 @@ async def create_tenant_admin(
         username=username,
         email=email,
         password_hash=password_hash,
+        name=name or username,  # Set name in user_accounts
         account_status=AccountStatus.PENDING_ACTIVATION,
         requires_password_change=True,
         created_by=UUID(current_user["user_id"]),
@@ -208,7 +209,7 @@ async def create_tenant_admin(
     admin = TenantAdminAccount(
         user_id=user.user_id,
         tenant_id=tenant_id,
-        name=name or username,
+        name=name or username,  # Also set in tenant_admin_accounts for backward compatibility
     )
     
     db.add(admin)
@@ -254,7 +255,8 @@ async def list_accounts(
             query = query.filter(
                 or_(
                     UserAccount.username.ilike(f"%{search}%"),
-                    UserAccount.email.ilike(f"%{search}%")
+                    UserAccount.email.ilike(f"%{search}%"),
+                    UserAccount.name.ilike(f"%{search}%")
                 )
             )
         
@@ -268,7 +270,7 @@ async def list_accounts(
             
             if tenant_admin:
                 user_role = "tenant_admin"
-                name = tenant_admin.name
+                name = user.name or tenant_admin.name or user.username  # Prefer user_accounts.name
             else:
                 # Get role from subject roles
                 subject_role = db.query(UserSubjectRole).filter(
@@ -283,7 +285,7 @@ async def list_accounts(
                 else:
                     user_role = "unknown"
                 
-                name = user.username
+                name = user.name or user.username  # Use name from user_accounts
             
             # Filter by role if specified
             if role and user_role != role:
@@ -354,7 +356,7 @@ async def get_account_details(
         
         if tenant_admin:
             role = "tenant_admin"
-            name = tenant_admin.name
+            name = user.name or tenant_admin.name or user.username  # Prefer user_accounts.name
         else:
             # Get role from subject roles
             subject_role = db.query(UserSubjectRole).filter(
@@ -369,7 +371,7 @@ async def get_account_details(
             else:
                 role = "unknown"
             
-            name = user.username
+            name = user.name or user.username  # Use name from user_accounts
         
         return {
             "account_id": str(user.user_id),
@@ -486,8 +488,10 @@ async def update_account(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists in this tenant")
         user.email = request.email
     
-    # Update name if it's a tenant admin
+    # Update name for all user types
     if request.name:
+        user.name = request.name
+        # Also update tenant_admin.name for backward compatibility
         tenant_admin = db.query(TenantAdminAccount).filter(
             TenantAdminAccount.user_id == user.user_id
         ).first()

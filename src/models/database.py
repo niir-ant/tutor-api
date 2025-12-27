@@ -99,6 +99,52 @@ def pg_enum(enum_class: type):
     return EnumType(enum_class)
 
 
+class EnumArrayType(TypeDecorator):
+    """
+    TypeDecorator for PostgreSQL arrays of enum types.
+    Handles conversion between Python list of enum instances and PostgreSQL enum array.
+    """
+    impl = String  # Base implementation, will be overridden in load_dialect_impl
+    cache_ok = True
+    
+    def __init__(self, enum_class: type):
+        super().__init__()
+        self.enum_class = enum_class
+        # Create the underlying PostgreSQL ENUM type
+        enum_values = [member.value for member in enum_class]
+        self.pg_enum = ENUM(
+            *enum_values,
+            name=_enum_name(enum_class),
+            schema="tutor",
+            create_type=False
+        )
+    
+    def load_dialect_impl(self, dialect):
+        """Use PostgreSQL ARRAY(ENUM) for PostgreSQL"""
+        if dialect.name == 'postgresql':
+            return ARRAY(self.pg_enum)
+        # For other dialects, use ARRAY(String)
+        return ARRAY(String)
+    
+    def process_bind_param(self, value, dialect):
+        """Convert Python list of enums to database array"""
+        if value is None:
+            return None
+        if isinstance(value, list):
+            # Convert enum instances to their string values
+            return [item.value if isinstance(item, Enum) else str(item) for item in value]
+        return value
+    
+    def process_result_value(self, value, dialect):
+        """Convert database array to Python list of enum instances"""
+        if value is None:
+            return None
+        if isinstance(value, list):
+            # Convert string values to enum instances
+            return [self.enum_class(item) if isinstance(item, str) else item for item in value]
+        return value
+
+
 class UserType(str, Enum):
     """User type for authentication tokens"""
     TENANT_USER = "tenant_user"
@@ -157,7 +203,7 @@ class Subject(Base):
     type = Column(pg_enum(SubjectType), nullable=False)
     grade_levels = Column(ARRAY(Integer))
     status = Column(pg_enum(SubjectStatus), nullable=False, default=SubjectStatus.ACTIVE)
-    supported_question_types = Column(ARRAY(String), nullable=False)  # Array of question type strings
+    supported_question_types = Column(EnumArrayType(QuestionType), nullable=False)  # Array of question type enums
     answer_validation_method = Column(pg_enum(ValidationMethod), nullable=False)
     settings = Column(JSONB)
     extra_metadata = Column("metadata", JSONB)  # Use 'metadata' as DB column name, 'extra_metadata' as Python attr
@@ -176,6 +222,7 @@ class UserAccount(Base):
     username = Column(String(100), nullable=False)
     email = Column(String(255), nullable=False)
     password_hash = Column(String(255), nullable=False)
+    name = Column(String(255))  # Display name (optional, defaults to username if not set)
     account_status = Column(pg_enum(AccountStatus), nullable=False, default=AccountStatus.PENDING_ACTIVATION)
     requires_password_change = Column(Boolean, nullable=False, default=True)
     failed_login_attempts = Column(Integer, nullable=False, default=0)

@@ -12,7 +12,7 @@ from src.models.database import (
 )
 from src.core.exceptions import NotFoundError, BadRequestError
 from src.core.security import get_password_hash
-from src.models.user import AccountStatus, UserRole, AssignmentStatus, SubjectStatus, SubjectType, ValidationMethod
+from src.models.user import AccountStatus, UserRole, AssignmentStatus, SubjectStatus, SubjectType, ValidationMethod, QuestionType
 
 
 class StudentService:
@@ -25,18 +25,18 @@ class StudentService:
         """Get or create the default subject for the system"""
         # Check if default subject exists
         default_subject = self.db.query(Subject).filter(
-            Subject.subject_code == "DEFAULT"
+            Subject.subject_code == "default"
         ).first()
         
         if not default_subject:
             # Create default subject
             default_subject = Subject(
-                subject_code="DEFAULT",
+                subject_code="default",
                 name="Default Subject",
                 description="Default subject created automatically for new users",
                 type=SubjectType.OTHER,
                 status=SubjectStatus.ACTIVE,
-                supported_question_types=["multiple_choice", "short_answer", "true_false"],
+                supported_question_types=[QuestionType.MULTIPLE_CHOICE, QuestionType.SHORT_ANSWER, QuestionType.TRUE_FALSE],
                 answer_validation_method=ValidationMethod.EXACT_MATCH,
                 grade_levels=None,  # Support all grade levels
                 created_by=created_by,
@@ -81,6 +81,7 @@ class StudentService:
             username=username,
             email=email,
             password_hash=password_hash,
+            name=username,  # Default name to username for students
             account_status=AccountStatus.PENDING_ACTIVATION,
             requires_password_change=True,
             created_by=created_by,
@@ -154,6 +155,7 @@ class StudentService:
             "user_id": str(user.user_id),
             "username": user.username,
             "email": user.email,
+            "name": user.name or user.username,  # Use name from user_accounts
             "grade_level": grade_level,
             "account_status": user.account_status.value,
             "created_at": user.created_at,
@@ -191,7 +193,8 @@ class StudentService:
             query = query.filter(
                 or_(
                     UserAccount.username.ilike(f"%{search}%"),
-                    UserAccount.email.ilike(f"%{search}%")
+                    UserAccount.email.ilike(f"%{search}%"),
+                    UserAccount.name.ilike(f"%{search}%")
                 )
             )
         
@@ -208,6 +211,7 @@ class StudentService:
                 "user_id": str(user.user_id),
                 "username": user.username,
                 "email": user.email,
+                "name": user.name or user.username,  # Include name from user_accounts
                 "grade_level": profile.grade_level if profile else None,
                 "account_status": user.account_status.value,
                 "created_at": user.created_at,

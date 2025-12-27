@@ -11,7 +11,7 @@ from src.core.exceptions import BadRequestError
 def is_default_subject(subject_id: UUID, db: Session) -> bool:
     """Check if a subject is the default subject"""
     subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
-    return subject is not None and subject.subject_code == "DEFAULT"
+    return subject is not None and subject.subject_code == "default"
 
 
 def prevent_remove_from_default_subject(user_id: UUID, subject_id: UUID, db: Session) -> None:

@@ -314,15 +314,10 @@ class MessageService:
             return {"name": "Unknown", "role": role or "unknown"}
         
         if role == "student":
-                return {"name": user.username, "role": "student"}
+            return {"name": user.name or user.username, "role": "student"}
         elif role == "tutor":
-            # Get tutor name from profile
-            profile = self.db.query(TutorSubjectProfile).filter(
-                TutorSubjectProfile.user_id == user_id
-            ).first()
-            name = profile.name if profile else user.username
-            return {"name": name, "role": "tutor"}
+            return {"name": user.name or user.username, "role": "tutor"}
         elif role == "tenant_admin":
-            return {"name": user.username, "role": "tenant_admin"}
+            return {"name": user.name or user.username, "role": "tenant_admin"}
         else:
-            return {"name": user.username, "role": role or "unknown"}
+            return {"name": user.name or user.username, "role": role or "unknown"}

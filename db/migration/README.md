@@ -11,6 +11,7 @@ The migrations follow Semantic Versioning (SemVer) naming convention: `major.min
 - `0.0.30__rls_policies.sql` - Row Level Security (RLS) policies for multi-tenant isolation
 - `0.0.40__roles_and_permissions.sql` - Database roles and permissions
 - `0.0.50__auth_rls_fix.sql` - RLS policy fix to allow system admin authentication
+- `0.0.60__add_name_to_user_accounts.sql` - Add name column to user_accounts table
 
 ## Prerequisites
 
@@ -32,6 +33,7 @@ psql -U postgres -d tutor
 \i 0.0.30__rls_policies.sql
 \i 0.0.40__roles_and_permissions.sql
 \i 0.0.50__auth_rls_fix.sql
+\i 0.0.60__add_name_to_user_accounts.sql
 ```
 
 ### Using a Migration Tool
