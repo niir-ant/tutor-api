@@ -25,10 +25,24 @@ def is_authenticated() -> bool:
 
 
 def get_user_role() -> Optional[str]:
-    """Get current user role"""
+    """Get current user role. For students/tutors, returns primary role from subject_roles."""
     user_info = st.session_state.get("user_info")
     if user_info:
-        return user_info.get("role")
+        # Check for tenant_admin or system_admin role first
+        role = user_info.get("role")
+        if role in ["tenant_admin", "system_admin"]:
+            return role
+        
+        # For students/tutors, check subject_roles
+        subject_roles = user_info.get("subject_roles", [])
+        if subject_roles:
+            # Return the first active role found
+            for sr in subject_roles:
+                if sr.get("status") == "active":
+                    return sr.get("role")  # "student" or "tutor"
+        
+        # Fallback to role if present
+        return role
     return None
 
 

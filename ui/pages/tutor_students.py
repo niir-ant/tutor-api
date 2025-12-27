@@ -16,14 +16,20 @@ def render():
     with st.spinner("Loading students..."):
         students_data = api_client.get_tutor_students(tutor_id)
     
-    if students_data and "students" in students_data:
-        students = students_data["students"]
-        total = students_data.get("total", len(students))
+    if students_data and "students_by_subject" in students_data:
+        students_by_subject = students_data["students_by_subject"]
+        total_students = students_data.get("total_students", 0)
         
-        st.metric("Total Students", total)
+        st.metric("Total Students", total_students)
         st.markdown("---")
         
-        for student in students:
+        # Display students grouped by subject
+        for subject_group in students_by_subject:
+            subject_name = subject_group.get("subject_name", subject_group.get("subject_code", "Unknown"))
+            st.subheader(f"📚 {subject_name}")
+            
+            students = subject_group.get("students", [])
+            for student in students:
             with st.expander(f"👤 {student.get('name', student.get('username', 'Unknown'))} - {student.get('email', '')}"):
                 col1, col2 = st.columns(2)
                 

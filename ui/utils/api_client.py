@@ -53,11 +53,14 @@ class APIClient:
             return {}
     
     # Authentication endpoints
-    def login(self, username: str, password: str, domain: str) -> Dict[str, Any]:
-        """Login user"""
+    def login(self, username: str, password: str, domain: str = None) -> Dict[str, Any]:
+        """Login user. Domain is optional for system admins."""
         url = f"{self.base_url}/auth/login"
-        params = {"domain": domain}
         data = {"username": username, "password": password}
+        params = {}
+        if domain:
+            data["domain"] = domain
+            params["domain"] = domain
         response = self.session.post(url, json=data, params=params)
         return self._handle_response(response)
     
@@ -270,16 +273,19 @@ class APIClient:
         return self._handle_response(response)
     
     # Tutor endpoints
-    def get_tutor_students(self, tutor_id: str = None) -> Dict[str, Any]:
-        """Get tutor's students"""
+    def get_tutor_students(self, tutor_id: str = None, subject_id: str = None) -> Dict[str, Any]:
+        """Get tutor's students (all subjects or filtered by subject)"""
         tutor_id = tutor_id or st.session_state.get("user_info", {}).get("user_id")
         url = f"{self.base_url}/tutors/{tutor_id}/students"
-        response = self.session.get(url, headers=self._get_headers())
+        params = {}
+        if subject_id:
+            params["subject_id"] = subject_id
+        response = self.session.get(url, params=params, headers=self._get_headers())
         return self._handle_response(response)
     
-    def get_student_progress_for_tutor(self, tutor_id: str, student_id: str) -> Dict[str, Any]:
-        """Get student progress (tutor view)"""
-        url = f"{self.base_url}/tutors/{tutor_id}/students/{student_id}/progress"
+    def get_student_progress_for_tutor(self, tutor_id: str, student_id: str, subject_id: str) -> Dict[str, Any]:
+        """Get student progress (tutor view) for a specific subject"""
+        url = f"{self.base_url}/tutors/{tutor_id}/subjects/{subject_id}/students/{student_id}/progress"
         response = self.session.get(url, headers=self._get_headers())
         return self._handle_response(response)
     
@@ -320,11 +326,11 @@ class APIClient:
         response = self.session.put(url, headers=self._get_headers())
         return self._handle_response(response)
     
-    # Admin endpoints (will be expanded as needed)
+    # Tenant Admin endpoints
     def create_student_account(self, username: str, email: str, grade_level: int = None,
                               send_activation_email: bool = False) -> Dict[str, Any]:
-        """Create student account (admin)"""
-        url = f"{self.base_url}/admin/students"
+        """Create student account (tenant admin)"""
+        url = f"{self.base_url}/tenant/students"
         data = {
             "username": username,
             "email": email,
@@ -336,9 +342,22 @@ class APIClient:
         response = self.session.post(url, json=data, headers=self._get_headers())
         return self._handle_response(response)
     
+    def create_tutor_account(self, username: str, email: str, name: str,
+                            send_activation_email: bool = False) -> Dict[str, Any]:
+        """Create tutor account (tenant admin)"""
+        url = f"{self.base_url}/tenant/tutors"
+        data = {
+            "username": username,
+            "email": email,
+            "name": name,
+            "send_activation_email": send_activation_email
+        }
+        response = self.session.post(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
     def list_accounts(self, role: str = None, status: str = None, search: str = None) -> Dict[str, Any]:
-        """List accounts (admin)"""
-        url = f"{self.base_url}/admin/accounts"
+        """List accounts (tenant admin)"""
+        url = f"{self.base_url}/tenant/accounts"
         params = {}
         if role:
             params["role"] = role
@@ -348,6 +367,42 @@ class APIClient:
             params["search"] = search
         
         response = self.session.get(url, params=params, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def get_account_details(self, account_id: str) -> Dict[str, Any]:
+        """Get account details (tenant admin)"""
+        url = f"{self.base_url}/tenant/accounts/{account_id}"
+        response = self.session.get(url, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def update_account_status(self, account_id: str, status: str, reason: str = None) -> Dict[str, Any]:
+        """Update account status (tenant admin)"""
+        url = f"{self.base_url}/tenant/accounts/{account_id}/status"
+        data = {"status": status}
+        if reason:
+            data["reason"] = reason
+        response = self.session.put(url, json=data, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    # System Admin endpoints
+    def list_system_accounts(self, role: str = None, status: str = None, search: str = None) -> Dict[str, Any]:
+        """List accounts system-wide (system admin)"""
+        url = f"{self.base_url}/system/accounts"
+        params = {}
+        if role:
+            params["role"] = role
+        if status:
+            params["status"] = status
+        if search:
+            params["search"] = search
+        
+        response = self.session.get(url, params=params, headers=self._get_headers())
+        return self._handle_response(response)
+    
+    def get_system_account_details(self, account_id: str) -> Dict[str, Any]:
+        """Get account details system-wide (system admin)"""
+        url = f"{self.base_url}/system/accounts/{account_id}"
+        response = self.session.get(url, headers=self._get_headers())
         return self._handle_response(response)
     
     def resolve_tenant(self, domain: str) -> Dict[str, Any]:

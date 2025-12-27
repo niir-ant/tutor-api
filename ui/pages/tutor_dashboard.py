@@ -8,7 +8,11 @@ from ui.utils.session_state import get_user_id
 
 def render():
     """Render tutor dashboard"""
-    st.title("👨‍🏫 Tutor Dashboard")
+    # Welcome message with tutor name (UX-7.1)
+    user_info = st.session_state.get("user_info", {})
+    username = user_info.get("username", "Tutor")
+    st.title(f"👨‍🏫 Welcome, {username}!")
+    st.markdown("---")
     
     tutor_id = get_user_id()
     api_client = get_api_client()
@@ -17,9 +21,15 @@ def render():
     with st.spinner("Loading your students..."):
         students_data = api_client.get_tutor_students(tutor_id)
     
-    if students_data and "students" in students_data:
-        students = students_data["students"]
-        total_students = students_data.get("total", len(students))
+    if students_data and "students_by_subject" in students_data:
+        students_by_subject = students_data["students_by_subject"]
+        total_students = students_data.get("total_students", 0)
+        
+        # Flatten for summary stats
+        all_students = []
+        for subject_group in students_by_subject:
+            all_students.extend(subject_group.get("students", []))
+        students = all_students
         
         st.subheader(f"👥 My Students ({total_students})")
         
@@ -66,18 +76,35 @@ def render():
     else:
         st.info("Loading student information...")
     
-    # Quick actions
+    # Quick actions (UX-7.2)
     st.markdown("---")
     st.subheader("🚀 Quick Actions")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
+        if st.button("👥 View All Students", use_container_width=True, type="primary"):
+            st.session_state["page"] = "My Students"
+            st.rerun()
+    
+    with col2:
         if st.button("💬 View Messages", use_container_width=True):
             st.session_state["page"] = "Messages"
             st.rerun()
     
-    with col2:
-        if st.button("📊 View All Progress", use_container_width=True):
+    with col3:
+        if st.button("📊 View Progress Reports", use_container_width=True):
             st.session_state["page"] = "Student Progress"
             st.rerun()
+    
+    # Recent activity and unread messages (UX-7.1)
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📈 Recent Student Activity")
+        st.info("Recent activity will be displayed here.")
+    
+    with col2:
+        st.subheader("💬 Unread Messages")
+        st.info("No unread messages.")
 

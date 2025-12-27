@@ -29,7 +29,7 @@ st.set_page_config(
 # Initialize session state
 init_session_state()
 
-# Custom CSS
+# Custom CSS (UX-2.2, UX-17.1 - Color scheme and accessibility)
 st.markdown("""
     <style>
     .main-header {
@@ -47,10 +47,28 @@ st.markdown("""
         font-weight: 600;
         margin-left: 1rem;
     }
+    /* Role color scheme (UX-2.2) */
     .role-student { background-color: #e3f2fd; color: #1976d2; }
     .role-tutor { background-color: #f3e5f5; color: #7b1fa2; }
-    .role-tenant_admin { background-color: #fff3e0; color: #e65100; }
-    .role-system_admin { background-color: #ffebee; color: #c62828; }
+    .role-tenant-admin { background-color: #fff3e0; color: #e65100; }
+    .role-system-admin { background-color: #ffebee; color: #c62828; }
+    
+    /* Status indicators (UX-2.2) */
+    .status-success { color: #2e7d32; }
+    .status-warning { color: #f57c00; }
+    .status-error { color: #c62828; }
+    
+    /* Accessibility improvements (UX-17.1) */
+    .stButton > button {
+        min-height: 44px; /* Touch-friendly targets */
+    }
+    
+    /* Better focus indicators */
+    .stTextInput > div > div > input:focus,
+    .stSelectbox > div > div > select:focus {
+        border-color: #1976d2;
+        box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -75,7 +93,7 @@ def main():
         # User info
         if user_info:
             username = user_info.get("username", "User")
-            role = user_info.get("role", "student")
+            role = get_user_role() or "student"  # Use get_user_role() to handle subject_roles
             tenant_name = user_info.get("tenant_name", "")
             
             st.markdown("---")

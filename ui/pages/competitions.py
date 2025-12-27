@@ -34,63 +34,127 @@ def render_student_view():
         st.info(f"No {status_filter} competitions available.")
         return
     
-    # Display competitions
+    # Display competitions (UX-5.1 - card-based layout)
     for comp in filtered_competitions:
         with st.container():
+            # Competition card
+            status = comp.get("status", "unknown")
+            status_badges = {
+                "upcoming": "🟡 Upcoming",
+                "active": "🟢 Active",
+                "ended": "🔴 Ended",
+                "cancelled": "⚫ Cancelled"
+            }
+            
             col1, col2 = st.columns([3, 1])
             
             with col1:
                 st.subheader(comp.get("name", "Unnamed Competition"))
-                st.caption(f"Subject: {comp.get('subject_code', 'N/A')}")
+                st.caption(f"📚 Subject: {comp.get('subject_code', 'N/A')}")
                 st.write(comp.get("description", ""))
                 
-                # Dates
+                # Dates (UX-5.2)
                 start_date = comp.get("start_date")
                 end_date = comp.get("end_date")
+                reg_start = comp.get("registration_start")
+                reg_end = comp.get("registration_end")
+                
+                if reg_start and reg_end:
+                    st.caption(f"📝 Registration: {reg_start} - {reg_end}")
                 if start_date and end_date:
-                    st.caption(f"📅 {start_date} - {end_date}")
+                    st.caption(f"📅 Competition: {start_date} - {end_date}")
             
             with col2:
-                status = comp.get("status", "unknown")
-                status_colors = {
-                    "upcoming": "🟡",
-                    "active": "🟢",
-                    "ended": "🔴",
-                    "cancelled": "⚫"
-                }
-                st.markdown(f"**{status_colors.get(status, '⚪')} {status.upper()}**")
+                st.markdown(f"**{status_badges.get(status, '⚪ Unknown')}**")
                 
                 participant_count = comp.get("participant_count", 0)
-                st.caption(f"👥 {participant_count} participants")
+                st.metric("Participants", participant_count)
+                
+                # Registration status (UX-5.1)
+                # Note: Would need to check registration status from API
+                st.caption("Registration status: Check API")
             
-            # Actions
+            # Actions (UX-5.1, UX-5.2)
             comp_id = comp.get("competition_id")
-            if status == "upcoming":
-                if st.button(f"📝 Register", key=f"register_{comp_id}"):
-                    with st.spinner("Registering..."):
-                        result = api_client.register_for_competition(str(comp_id))
-                        if result:
-                            st.success("Successfully registered!")
-                            st.rerun()
             
-            elif status == "active":
+            if status == "upcoming":
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button(f"🚀 Start Competition", key=f"start_{comp_id}"):
+                    if st.button(f"📝 Register", key=f"register_{comp_id}", use_container_width=True, type="primary"):
+                        with st.spinner("Registering..."):
+                            result = api_client.register_for_competition(str(comp_id))
+                            if result:
+                                st.success("✅ Successfully registered!")
+                                st.rerun()
+                            else:
+                                st.error("Registration failed. Please try again.")
+                with col2:
+                    if st.button(f"📋 View Details", key=f"details_{comp_id}", use_container_width=True):
+                        show_competition_details(comp_id)
+            
+            elif status == "active":
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button(f"🚀 Start Competition", key=f"start_{comp_id}", use_container_width=True, type="primary"):
                         st.info("Competition session functionality will be implemented.")
                 with col2:
-                    if st.button(f"📊 View Leaderboard", key=f"leaderboard_{comp_id}"):
+                    if st.button(f"📊 View Leaderboard", key=f"leaderboard_{comp_id}", use_container_width=True):
                         show_leaderboard(comp_id)
+                with col3:
+                    if st.button(f"📋 View Details", key=f"details_active_{comp_id}", use_container_width=True):
+                        show_competition_details(comp_id)
             
             elif status == "ended":
-                if st.button(f"📊 View Results", key=f"results_{comp_id}"):
-                    show_leaderboard(comp_id)
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"📊 View Results", key=f"results_{comp_id}", use_container_width=True, type="primary"):
+                        show_leaderboard(comp_id)
+                with col2:
+                    if st.button(f"📋 View Details", key=f"details_ended_{comp_id}", use_container_width=True):
+                        show_competition_details(comp_id)
             
             st.markdown("---")
 
 
+def show_competition_details(competition_id: str):
+    """Show competition details (UX-5.2)"""
+    api_client = get_api_client()
+    
+    with st.spinner("Loading competition details..."):
+        comp_data = api_client.get_competition(str(competition_id))
+    
+    if comp_data:
+        st.subheader(f"📋 {comp_data.get('name', 'Competition Details')}")
+        st.markdown("---")
+        
+        st.write(f"**Description:** {comp_data.get('description', 'N/A')}")
+        st.write(f"**Subject:** {comp_data.get('subject_code', 'N/A')}")
+        
+        # Rules and eligibility (UX-5.2)
+        rules = comp_data.get("rules", {})
+        if rules:
+            with st.expander("📜 Competition Rules"):
+                st.json(rules)
+        
+        eligibility = comp_data.get("eligibility", {})
+        if eligibility:
+            with st.expander("✅ Eligibility Criteria"):
+                st.json(eligibility)
+        
+        # Dates
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"**Start Date:** {comp_data.get('start_date', 'N/A')}")
+            st.write(f"**End Date:** {comp_data.get('end_date', 'N/A')}")
+        with col2:
+            st.write(f"**Registration Start:** {comp_data.get('registration_start', 'N/A')}")
+            st.write(f"**Registration End:** {comp_data.get('registration_end', 'N/A')}")
+    else:
+        st.error("Could not load competition details.")
+
+
 def show_leaderboard(competition_id: str):
-    """Show competition leaderboard"""
+    """Show competition leaderboard (UX-5.4)"""
     api_client = get_api_client()
     
     with st.spinner("Loading leaderboard..."):
